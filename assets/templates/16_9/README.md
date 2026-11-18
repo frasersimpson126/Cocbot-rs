@@ -1,0 +1,1 @@
+Place the 16:9 Clash of Clans screen-state and troop-icon PNG templates in this directory. Filenames must match the list in the parent README. These templates are not currently bundled; use real captures from the target game version and validate recognition before enabling any automated input.
