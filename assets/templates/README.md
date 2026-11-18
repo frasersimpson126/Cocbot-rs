@@ -12,6 +12,7 @@ No game screenshots or template images are bundled yet.
 - `findnow.png` and `bbfindnow.png` — matchmaking controls
 - `attack.png` and `farmbattle.png` — Home Village entry controls
 - `bbattack.png` — Builder Base entry control
+- `returnhome.png` and `bbreturnhome.png` — result-screen return controls
 
 ## Troop icon templates
 
