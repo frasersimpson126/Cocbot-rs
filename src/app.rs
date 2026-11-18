@@ -24,6 +24,7 @@ pub struct CocbotApp {
     backend: Option<FarmingBackend>,
     backend_status: String,
     backend_loot: Option<(LootDelta, LootDelta)>,
+    backend_elapsed: Option<std::time::Duration>,
     event_tx: Sender<BackendEvent>,
     event_rx: Receiver<BackendEvent>,
 }
@@ -42,6 +43,7 @@ impl CocbotApp {
             backend: None,
             backend_status: "Not connected".into(),
             backend_loot: None,
+            backend_elapsed: None,
             event_tx,
             event_rx,
         }
@@ -75,8 +77,9 @@ impl eframe::App for CocbotApp {
                         self.backend_status = format!("Connected — {width}×{height}");
                         self.logs.push(self.backend_status.clone());
                     }
-                    BackendEvent::LootUpdated { total, per_hour } => {
+                    BackendEvent::LootUpdated { total, per_hour, elapsed } => {
                         self.backend_loot = Some((total, per_hour));
+                        self.backend_elapsed = Some(elapsed);
                     }
                     BackendEvent::Status(message) => self.logs.push(message),
                     BackendEvent::Error(message) => {
@@ -117,7 +120,7 @@ impl eframe::App for CocbotApp {
         egui::CentralPanel::default().show(ctx, |ui| match self.page {
             Page::Overview => {
                 ui.heading("Farming overview");
-                ui.label("Live village recognition will appear here once game capture is implemented.");
+                ui.label("Live game capture and HUD OCR status is shown in the Farming page.");
                 ui.separator();
                 let summary = self.loot.summary();
                 let (total, per_hour) = self.backend_loot.unwrap_or((summary.total, summary.per_hour));
@@ -126,7 +129,8 @@ impl eframe::App for CocbotApp {
                 Self::resource_row(ui, "Elixir", total.elixir, per_hour.elixir);
                 Self::resource_row(ui, "Dark elixir", total.dark_elixir, per_hour.dark_elixir);
                 ui.add_space(12.0);
-                ui.label(format!("Elapsed tracking time: {:.0} min", summary.elapsed.as_secs_f64() / 60.0));
+                let elapsed = self.backend_elapsed.unwrap_or(summary.elapsed);
+                ui.label(format!("Elapsed tracking time: {:.0} min", elapsed.as_secs_f64() / 60.0));
                 ui.label("Automation target: Clash of Clans in Google Play Games for Windows.");
             }
             Page::Farming => {
