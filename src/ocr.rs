@@ -60,6 +60,7 @@ impl OcrEngine {
             .context("Could not encode OCR input image")?;
 
         let mut command = Command::new(&self.executable);
+        command.env("OMP_THREAD_LIMIT", "1");
         command.arg("stdin").arg("stdout").arg("--oem").arg("1");
         match profile {
             OcrProfile::HudNumbers => {
