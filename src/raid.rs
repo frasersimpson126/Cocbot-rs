@@ -415,6 +415,28 @@ mod tests {
     }
 
     #[test]
+    fn pausing_and_resuming_during_a_battle_preserves_the_raid_phase() {
+        let mut raid = coordinator();
+        raid.start(BattleState::HomeVillage).unwrap();
+        raid.observe_state(BattleState::OpponentFound);
+        raid.evaluate_opponent(good_target());
+        let slot = TroopSlot {
+            name: "sneaky_goblin".into(),
+            bounds: TemplateMatch { x: 10, y: 10, width: 30, height: 30, confidence: 0.99 },
+        };
+        raid.prepare_deployment(
+            BattleState::HomeBattle,
+            Viewport { width: 1280, height: 720 },
+            &[slot],
+        ).unwrap();
+        raid.confirm_deployment_started(BattleState::HomeBattle).unwrap();
+        raid.pause();
+        assert_eq!(raid.phase(), RaidPhase::Paused);
+        assert_eq!(raid.resume(BattleState::HomeBattle), RaidCommand::WaitForStableFrame);
+        assert_eq!(raid.phase(), RaidPhase::InBattle);
+    }
+
+    #[test]
     fn wrong_village_strategy_is_rejected() {
         let result = RaidCoordinator::new(
             Village::BuilderBase,
