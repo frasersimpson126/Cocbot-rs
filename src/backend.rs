@@ -1,7 +1,7 @@
 use crate::{
     automation::AutomationEngine,
     battle::BattleState,
-    config::{AppConfig, LootPriority},
+    config::AppConfig,
     deployment::{DeploymentPlanner, Viewport},
     loot::{LootTracker, ResourceSnapshot},
     ocr::{OcrEngine, OcrProfile},
