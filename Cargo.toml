@@ -2,7 +2,7 @@
 name = "cocbot-rs"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.85"
+rust-version = "1.93.1"
 description = "Rust desktop automation framework for Clash of Clans farming and loot tracking"
 license = "MIT"
 repository = "https://github.com/frasersimpson126/Cocbot-rs"
