@@ -90,7 +90,11 @@ impl FarmingBackend {
                             if last_battle_state != Some(analysis.stable_state) {
                                 let _ = events.send(BackendEvent::BattleUpdated {
                                     state: analysis.stable_state,
-                                    confidence: if analysis.stable_state == BattleState::Unknown {\n                                        0.0\n                                    } else {\n                                        analysis.detection.confidence\n                                    },
+                                    confidence: if analysis.stable_state == BattleState::Unknown {
+                                        0.0
+                                    } else {
+                                        analysis.detection.confidence
+                                    },
                                 });
                                 last_battle_state = Some(analysis.stable_state);
                             }
