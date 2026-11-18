@@ -107,7 +107,9 @@ impl TemplateMatcher {
         let sx = fw as f32 / self.reference_width as f32;
         let scaled_w = ((template.width() as f32 * sx).round() as u32).max(1);
         let scaled_h = ((template.height() as f32 * sx).round() as u32).max(1);
-        let scale = 4_u32;
+        // Keep small UI glyphs detailed while reducing larger game templates to
+        // a bounded matching size.
+        let scale = (scaled_w.min(scaled_h) / 16).clamp(1, 4);
         let tw = (scaled_w / scale).max(1);
         let th = (scaled_h / scale).max(1);
         let small_template = imageops::resize(template, tw, th, imageops::FilterType::Triangle);
