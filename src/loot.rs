@@ -58,9 +58,7 @@ impl LootTracker {
     /// Establishes the initial baseline. Subsequent calls add only plausible, non-negative
     /// gains. A rejected snapshot still becomes the next baseline to avoid repeated errors.
     pub fn observe(&mut self, snapshot: ResourceSnapshot) -> Option<LootDelta> {
-        let Some(previous) = self.previous.replace(snapshot) else {
-            return None;
-        };
+        let previous = self.previous.replace(snapshot)?;
 
         let delta = LootDelta {
             gold: snapshot.gold.checked_sub(previous.gold)?,
