@@ -86,7 +86,7 @@ impl TemplateMatcher {
 
         let mut best_error = f32::MAX;
         let mut best_xy = None;
-        let step = 2_u32;
+        let step = 1_u32;
         for y in (0..=search.height() - th).step_by(step as usize) {
             for x in (0..=search.width() - tw).step_by(step as usize) {
                 let mut error = 0_u64;
