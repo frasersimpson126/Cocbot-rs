@@ -10,6 +10,7 @@ pub mod battle;
 pub mod target;
 pub mod deployment;
 pub mod raid;
+pub mod executor;
 
 use anyhow::Result;
 
