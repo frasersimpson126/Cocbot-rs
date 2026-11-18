@@ -22,6 +22,8 @@ pub enum OcrProfile {
 pub struct OcrResult {
     pub text: String,
     pub elapsed_ms: u128,
+    /// Conservative confidence: lowest recognised word confidence, normalised to 0..=1.
+    pub confidence: f32,
 }
 
 #[derive(Debug, Clone)]
@@ -81,6 +83,8 @@ impl OcrEngine {
                     .arg("-c").arg("preserve_interword_spaces=0");
             }
         }
+        // TSV provides word-level confidence without a second Tesseract invocation.
+        command.arg("tsv");
 
         let mut child = command.stdin(Stdio::piped()).stdout(Stdio::piped())
             .stderr(Stdio::piped()).spawn()
@@ -93,9 +97,11 @@ impl OcrEngine {
                 String::from_utf8_lossy(&output.stderr).trim());
         }
 
+        let (text, confidence) = parse_tsv(&String::from_utf8_lossy(&output.stdout));
         Ok(OcrResult {
-            text: String::from_utf8_lossy(&output.stdout).trim().to_owned(),
+            text,
             elapsed_ms: started.elapsed().as_millis(),
+            confidence,
         })
     }
 
@@ -155,6 +161,41 @@ impl OcrEngine {
     }
 }
 
+fn parse_tsv(tsv: &str) -> (String, f32) {
+    use std::collections::BTreeMap;
+    let mut lines: BTreeMap<(u32, u32, u32, u32), Vec<String>> = BTreeMap::new();
+    let mut weakest_confidence = 100.0_f32;
+    for row in tsv.lines().skip(1) {
+        let fields: Vec<&str> = row.splitn(12, '\\t').collect();
+        if fields.len() != 12 || fields[0] != "5" {
+            continue;
+        }
+        let Ok(confidence) = fields[10].parse::<f32>() else { continue };
+        let word = fields[11].trim();
+        if confidence < 0.0 || word.is_empty() {
+            continue;
+        }
+        let key = (
+            fields[1].parse().unwrap_or(0),
+            fields[2].parse().unwrap_or(0),
+            fields[3].parse().unwrap_or(0),
+            fields[4].parse().unwrap_or(0),
+        );
+        lines.entry(key).or_default().push(word.to_owned());
+        weakest_confidence = weakest_confidence.min(confidence);
+    }
+    let text = lines.values()
+        .map(|words| words.join(" "))
+        .collect::<Vec<_>>()
+        .join("\\n");
+    let confidence = if weakest_confidence.is_finite() {
+        (weakest_confidence / 100.0).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    (text, confidence)
+}
+
 impl Default for OcrEngine {
     fn default() -> Self {
         Self::new("tesseract")
@@ -178,6 +219,26 @@ mod tests {
             OcrEngine::parse_hud_triplet("1,200,000\n850000\n12000"),
             Some([1_200_000, 850_000, 12_000])
         );
+    }
+
+    #[test]
+    fn parses_tesseract_tsv_into_lines_and_conservative_confidence() {
+        let tsv = concat!(
+            "level\\tpage_num\\tblock_num\\tpar_num\\tline_num\\tword_num\\tleft\\ttop\\twidth\\theight\\tconf\\ttext\\n",
+            "5\\t1\\t1\\t1\\t1\\t1\\t0\\t0\\t20\\t10\\t96.5\\t1,200,000\\n",
+            "5\\t1\\t1\\t1\\t2\\t1\\t0\\t20\\t20\\t10\\t92.0\\t850000\\n",
+            "5\\t1\\t1\\t1\\t3\\t1\\t0\\t40\\t20\\t10\\t98.0\\t12000\\n",
+        );
+        let (text, confidence) = parse_tsv(tsv);
+        assert_eq!(text, "1,200,000\\n850000\\n12000");
+        assert!((confidence - 0.92).abs() < 0.001);
+    }
+
+    #[test]
+    fn empty_tsv_has_zero_confidence() {
+        let (text, confidence) = parse_tsv("level\\tpage_num\\tblock_num\\tpar_num\\tline_num\\tword_num\\tleft\\ttop\\twidth\\theight\\tconf\\ttext\\n");
+        assert!(text.is_empty());
+        assert_eq!(confidence, 0.0);
     }
 
     #[test]
