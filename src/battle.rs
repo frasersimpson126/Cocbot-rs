@@ -65,6 +65,55 @@ impl BattleStateDetector {
     }
 }
 
+/// Requires repeated identical detections before publishing a state. A mismatch or
+/// Unknown observation immediately returns Unknown, preventing stale battle states
+/// from authorising an action while the screen is transitioning.
+#[derive(Debug, Clone)]
+pub struct StateStabilizer {
+    required_samples: u8,
+    candidate: BattleState,
+    consecutive: u8,
+}
+
+impl Default for StateStabilizer {
+    fn default() -> Self {
+        Self::new(2)
+    }
+}
+
+impl StateStabilizer {
+    pub fn new(required_samples: u8) -> Self {
+        Self {
+            required_samples: required_samples.max(1),
+            candidate: BattleState::Unknown,
+            consecutive: 0,
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.candidate = BattleState::Unknown;
+        self.consecutive = 0;
+    }
+
+    pub fn observe(&mut self, detection: BattleState) -> BattleState {
+        if detection == BattleState::Unknown {
+            self.reset();
+            return BattleState::Unknown;
+        }
+        if detection == self.candidate {
+            self.consecutive = self.consecutive.saturating_add(1);
+        } else {
+            self.candidate = detection;
+            self.consecutive = 1;
+        }
+        if self.consecutive >= self.required_samples {
+            detection
+        } else {
+            BattleState::Unknown
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct TroopSlot {
     pub name: String,
@@ -113,10 +162,33 @@ mod tests {
 
     #[test]
     fn unknown_is_the_safe_default_for_unrecognised_screens() {
-        // StateDetection is deliberately explicit: absence of a known anchor must
-        // never be interpreted as permission to deploy.
         let detection = StateDetection { state: BattleState::Unknown, confidence: 0.0, anchor: None };
         assert_eq!(detection.state, BattleState::Unknown);
         assert!(detection.anchor.is_none());
+    }
+
+    #[test]
+    fn stabilizer_requires_consecutive_matching_frames() {
+        let mut stable = StateStabilizer::new(3);
+        assert_eq!(stable.observe(BattleState::HomeBattle), BattleState::Unknown);
+        assert_eq!(stable.observe(BattleState::HomeBattle), BattleState::Unknown);
+        assert_eq!(stable.observe(BattleState::HomeBattle), BattleState::HomeBattle);
+    }
+
+    #[test]
+    fn unknown_frame_clears_pending_state() {
+        let mut stable = StateStabilizer::new(2);
+        stable.observe(BattleState::HomeBattle);
+        assert_eq!(stable.observe(BattleState::Unknown), BattleState::Unknown);
+        assert_eq!(stable.observe(BattleState::HomeBattle), BattleState::Unknown);
+    }
+
+    #[test]
+    fn a_state_change_must_stabilise_again() {
+        let mut stable = StateStabilizer::new(2);
+        stable.observe(BattleState::HomeBattle);
+        assert_eq!(stable.observe(BattleState::HomeBattle), BattleState::HomeBattle);
+        assert_eq!(stable.observe(BattleState::Matchmaking), BattleState::Unknown);
+        assert_eq!(stable.observe(BattleState::Matchmaking), BattleState::Matchmaking);
     }
 }
