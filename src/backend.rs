@@ -107,12 +107,19 @@ impl Drop for FarmingBackend {
 fn read_hud(window: &GameWindow, ocr: &OcrEngine) -> Result<Option<ResourceSnapshot>> {
     let frame = window.capture()?;
     let (width, height) = (frame.width(), frame.height());
-    let left = width * 72 / 100;
-    let top = height * 3 / 100;
-    let roi_width = width.saturating_sub(left);
-    let roi_height = height * 27 / 100;
+    // Match BasePilot's empirically tuned HUD ROI: 600×400 at 2560×1600
+    // (16:10), or 550×350 at 2560×1440 (16:9).
+    let is_widescreen = width as f32 / height as f32 > 1.70;
+    let (reference_width, reference_height, roi_ref_width, roi_ref_height) = if is_widescreen {
+        (2560.0_f32, 1440.0_f32, 550.0_f32, 350.0_f32)
+    } else {
+        (2560.0_f32, 1600.0_f32, 600.0_f32, 400.0_f32)
+    };
+    let roi_width = ((width as f32 * roi_ref_width / reference_width).round() as u32).min(width);
+    let roi_height = ((height as f32 * roi_ref_height / reference_height).round() as u32).min(height);
+    let left = width.saturating_sub(roi_width);
     if roi_width == 0 || roi_height == 0 { return Ok(None); }
-    let roi = imageops::crop_imm(&frame, left, top, roi_width, roi_height).to_image();
+    let roi = imageops::crop_imm(&frame, left, 0, roi_width, roi_height).to_image();
     let result = ocr.recognise(&DynamicImage::ImageRgba8(roi), OcrProfile::HudNumbers)?;
     let Some([gold, elixir, dark_elixir]) = OcrEngine::parse_hud_triplet(&result.text) else {
         return Ok(None);
