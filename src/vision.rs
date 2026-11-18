@@ -143,8 +143,10 @@ impl TemplateMatcher {
 
         let mut best_confidence = -1.0_f32;
         let mut best_xy = None;
-        for y in 0..=search.height() - th {
-            for x in 0..=search.width() - tw {
+        // Search on a 2-pixel grid in the reduced image; the UI templates are
+        // large enough that this cuts most candidate windows without material loss.
+        for y in (0..=search.height() - th).step_by(2) {
+            for x in (0..=search.width() - tw).step_by(2) {
                 let mut image_sum = 0.0_f64;
                 let mut image_square_sum = 0.0_f64;
                 let mut cross_sum = 0.0_f64;
