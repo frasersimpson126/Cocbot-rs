@@ -9,6 +9,7 @@ pub mod vision;
 pub mod battle;
 pub mod target;
 pub mod deployment;
+pub mod raid;
 
 use anyhow::Result;
 
