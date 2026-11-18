@@ -166,7 +166,7 @@ fn parse_tsv(tsv: &str) -> (String, f32) {
     let mut lines: BTreeMap<(u32, u32, u32, u32), Vec<String>> = BTreeMap::new();
     let mut weakest_confidence = 100.0_f32;
     for row in tsv.lines().skip(1) {
-        let fields: Vec<&str> = row.splitn(12, '\\t').collect();
+        let fields: Vec<&str> = row.splitn(12, '\t').collect();
         if fields.len() != 12 || fields[0] != "5" {
             continue;
         }
@@ -187,7 +187,7 @@ fn parse_tsv(tsv: &str) -> (String, f32) {
     let text = lines.values()
         .map(|words| words.join(" "))
         .collect::<Vec<_>>()
-        .join("\\n");
+        .join("\n");
     let confidence = if weakest_confidence.is_finite() {
         (weakest_confidence / 100.0).clamp(0.0, 1.0)
     } else {
@@ -224,19 +224,19 @@ mod tests {
     #[test]
     fn parses_tesseract_tsv_into_lines_and_conservative_confidence() {
         let tsv = concat!(
-            "level\\tpage_num\\tblock_num\\tpar_num\\tline_num\\tword_num\\tleft\\ttop\\twidth\\theight\\tconf\\ttext\\n",
-            "5\\t1\\t1\\t1\\t1\\t1\\t0\\t0\\t20\\t10\\t96.5\\t1,200,000\\n",
-            "5\\t1\\t1\\t1\\t2\\t1\\t0\\t20\\t20\\t10\\t92.0\\t850000\\n",
-            "5\\t1\\t1\\t1\\t3\\t1\\t0\\t40\\t20\\t10\\t98.0\\t12000\\n",
+            "level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext\n",
+            "5\t1\t1\t1\t1\t1\t0\t0\t20\t10\t96.5\t1,200,000\n",
+            "5\t1\t1\t1\t2\t1\t0\t20\t20\t10\t92.0\t850000\n",
+            "5\t1\t1\t1\t3\t1\t0\t40\t20\t10\t98.0\t12000\n",
         );
         let (text, confidence) = parse_tsv(tsv);
-        assert_eq!(text, "1,200,000\\n850000\\n12000");
+        assert_eq!(text, "1,200,000\n850000\n12000");
         assert!((confidence - 0.92).abs() < 0.001);
     }
 
     #[test]
     fn empty_tsv_has_zero_confidence() {
-        let (text, confidence) = parse_tsv("level\\tpage_num\\tblock_num\\tpar_num\\tline_num\\tword_num\\tleft\\ttop\\twidth\\theight\\tconf\\ttext\\n");
+        let (text, confidence) = parse_tsv("level\tpage_num\tblock_num\tpar_num\tline_num\tword_num\tleft\ttop\twidth\theight\tconf\ttext\n");
         assert!(text.is_empty());
         assert_eq!(confidence, 0.0);
     }
