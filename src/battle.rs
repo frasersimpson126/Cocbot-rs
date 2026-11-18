@@ -154,6 +154,9 @@ impl DeploymentBarRecognizer {
         };
         let mut slots = Vec::new();
         for template in troop_templates {
+            if !self.matcher.has_template(template) {
+                continue;
+            }
             if let Some(found) = self.matcher.find(frame, template, self.threshold, Some(bar))? {
                 slots.push(TroopSlot {
                     name: template.trim_end_matches(".png").to_owned(),
