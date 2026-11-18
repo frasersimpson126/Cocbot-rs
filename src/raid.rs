@@ -22,6 +22,7 @@ pub enum RaidPhase {
 pub enum RaidCommand {
     None,
     WaitForStableFrame,
+    OpenAttackMenu,
     FindOpponent,
     SkipOpponent,
     Deploy(DeploymentPlan),
@@ -86,7 +87,7 @@ impl RaidCoordinator {
             return Err(RaidError::UnexpectedState);
         }
         self.phase = RaidPhase::Searching;
-        Ok(RaidCommand::FindOpponent)
+        Ok(RaidCommand::OpenAttackMenu)
     }
 
     /// Feed only stabilised screen states into this method.
@@ -95,6 +96,7 @@ impl RaidCoordinator {
             return RaidCommand::WaitForStableFrame;
         }
         match (self.phase, state) {
+            (RaidPhase::Searching, BattleState::AttackMenu) => RaidCommand::FindOpponent,
             (RaidPhase::Searching, BattleState::Matchmaking) => RaidCommand::WaitForStableFrame,
             (RaidPhase::Searching, BattleState::OpponentFound) => {
                 self.phase = RaidPhase::EvaluatingOpponent;
@@ -112,13 +114,13 @@ impl RaidCoordinator {
                 if self.village == Village::Home =>
             {
                 self.phase = RaidPhase::Searching;
-                RaidCommand::FindOpponent
+                RaidCommand::OpenAttackMenu
             }
             (RaidPhase::AwaitingReturn, BattleState::BuilderBase)
                 if self.village == Village::BuilderBase =>
             {
                 self.phase = RaidPhase::Searching;
-                RaidCommand::FindOpponent
+                RaidCommand::OpenAttackMenu
             }
             (RaidPhase::Paused, _) => RaidCommand::WaitForStableFrame,
             (_, BattleState::Unknown) => RaidCommand::WaitForStableFrame,
@@ -195,7 +197,7 @@ impl RaidCoordinator {
         };
         if state == expected_home {
             self.phase = RaidPhase::Searching;
-            RaidCommand::FindOpponent
+            RaidCommand::OpenAttackMenu
         } else {
             RaidCommand::WaitForStableFrame
         }
@@ -237,7 +239,7 @@ mod tests {
     #[test]
     fn starts_only_from_the_correct_village() {
         let mut raid = coordinator();
-        assert_eq!(raid.start(BattleState::HomeVillage), Ok(RaidCommand::FindOpponent));
+        assert_eq!(raid.start(BattleState::HomeVillage), Ok(RaidCommand::OpenAttackMenu));
         assert_eq!(raid.phase(), RaidPhase::Searching);
         assert_eq!(coordinator().start(BattleState::Matchmaking), Err(RaidError::UnexpectedState));
     }
@@ -298,7 +300,7 @@ mod tests {
         raid.confirm_deployment_started(BattleState::HomeBattle).unwrap();
         assert_eq!(raid.phase(), RaidPhase::InBattle);
         assert_eq!(raid.observe_state(BattleState::BattleWon), RaidCommand::ReturnToVillage);
-        assert_eq!(raid.observe_state(BattleState::HomeVillage), RaidCommand::FindOpponent);
+        assert_eq!(raid.observe_state(BattleState::HomeVillage), RaidCommand::OpenAttackMenu);
     }
 
     #[test]
