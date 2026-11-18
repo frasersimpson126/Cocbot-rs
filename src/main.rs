@@ -11,6 +11,7 @@ pub mod target;
 pub mod deployment;
 pub mod raid;
 pub mod executor;
+pub mod pipeline;
 
 use anyhow::Result;
 
