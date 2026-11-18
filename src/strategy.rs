@@ -34,6 +34,10 @@ impl ArmyStrategy {
         }
     }
 
+    pub fn is_builder_base(self) -> bool {
+        matches!(self, Self::BuilderBaseBabyDragon)
+    }
+
     pub fn village_label(self) -> &'static str {
         match self {
             Self::BuilderBaseBabyDragon => "Builder Base",
