@@ -1,4 +1,8 @@
-use crate::{config::LootPriority, loot::ResourceSnapshot};
+use crate::{
+    config::LootPriority,
+    loot::ResourceSnapshot,
+    ocr::OcrEngine,
+};
 
 /// Minimum loot requirements used when deciding whether a searched base is worth attacking.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -6,9 +10,7 @@ pub struct TargetPolicy {
     pub minimum_gold: u64,
     pub minimum_elixir: u64,
     pub minimum_dark_elixir: u64,
-    /// Minimum weighted score in the range 0.0..=1.0.
     pub minimum_score_percent: u8,
-    /// OCR/template confidence required before values may be trusted.
     pub minimum_confidence_percent: u8,
 }
 
@@ -30,6 +32,18 @@ impl Default for TargetPolicy {
 pub struct TargetCandidate {
     pub loot: ResourceSnapshot,
     pub confidence: f32,
+}
+
+impl TargetCandidate {
+    /// Parses the three vertically ordered resource counters using the same tolerant
+    /// digit parser as the live HUD reader. The caller supplies the OCR confidence.
+    pub fn from_ocr_text(text: &str, confidence: f32) -> Option<Self> {
+        let [gold, elixir, dark_elixir] = OcrEngine::parse_hud_triplet(text)?;
+        Some(Self {
+            loot: ResourceSnapshot { gold, elixir, dark_elixir },
+            confidence,
+        })
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -83,8 +97,6 @@ impl TargetEvaluator {
             return reject(TargetRejection::DarkElixirBelowMinimum);
         }
 
-        // Saturating ratios prevent extreme OCR values from overflowing and cap each
-        // resource contribution at 100%, so one unusually large counter cannot dominate.
         let gold = ratio(candidate.loot.gold, self.policy.minimum_gold.saturating_mul(3));
         let elixir = ratio(candidate.loot.elixir, self.policy.minimum_elixir.saturating_mul(3));
         let dark = ratio(
@@ -125,6 +137,20 @@ mod tests {
             loot: ResourceSnapshot { gold, elixir, dark_elixir },
             confidence,
         }
+    }
+
+    #[test]
+    fn parses_opponent_loot_from_three_ocr_lines() {
+        let candidate = TargetCandidate::from_ocr_text("1,200,000\n850000\n12000", 0.97).unwrap();
+        assert_eq!(candidate.loot, ResourceSnapshot {
+            gold: 1_200_000, elixir: 850_000, dark_elixir: 12_000,
+        });
+        assert_eq!(candidate.confidence, 0.97);
+    }
+
+    #[test]
+    fn malformed_ocr_does_not_produce_a_candidate() {
+        assert!(TargetCandidate::from_ocr_text("1,200,000\n850000", 0.99).is_none());
     }
 
     #[test]
