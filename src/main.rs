@@ -1,5 +1,7 @@
 mod app;
 pub mod config;
+pub mod backend;
+pub mod platform;
 pub mod loot;
 pub mod ocr;
 pub mod strategy;
