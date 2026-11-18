@@ -1,8 +1,11 @@
 use crate::{
     config::LootPriority,
     loot::ResourceSnapshot,
-    ocr::OcrEngine,
+    ocr::{OcrEngine, OcrProfile},
+    vision::SearchRegion,
 };
+use anyhow::{Result, bail};
+use image::DynamicImage;
 
 /// Minimum loot requirements used when deciding whether a searched base is worth attacking.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -43,6 +46,24 @@ impl TargetCandidate {
             loot: ResourceSnapshot { gold, elixir, dark_elixir },
             confidence,
         })
+    }
+
+    /// Reads the opponent's three resource counters from a caller-calibrated ROI.
+    /// Returns None when the crop cannot be parsed into all three values.
+    pub fn from_frame(
+        frame: &DynamicImage,
+        ocr: &OcrEngine,
+        region: SearchRegion,
+    ) -> Result<Option<Self>> {
+        if region.width == 0 || region.height == 0
+            || region.x.saturating_add(region.width) > frame.width()
+            || region.y.saturating_add(region.height) > frame.height()
+        {
+            bail!("Opponent loot OCR region is outside the captured frame");
+        }
+        let crop = frame.crop_imm(region.x, region.y, region.width, region.height);
+        let result = ocr.recognise(&crop, OcrProfile::HudNumbers)?;
+        Ok(Self::from_ocr_text(&result.text, result.confidence))
     }
 }
 
