@@ -1,6 +1,10 @@
 use anyhow::{Context, Result, bail};
 use image::{imageops, DynamicImage, GrayImage};
-use std::path::{Path, PathBuf};
+use std::{
+    collections::HashMap,
+    path::{Path, PathBuf},
+    sync::Mutex,
+};
 
 /// Coordinates are relative to the captured game window.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -21,19 +25,21 @@ pub struct SearchRegion {
     pub height: u32,
 }
 
-/// Lightweight, resolution-independent template matcher.
-///
-/// Templates are authored against a 2560px-wide reference image and stored as PNGs
-/// in assets/templates. Both the frame and template are reduced before matching so
-/// matching cost stays bounded on high-resolution desktop captures.
+/// Lightweight, resolution-independent template matcher. Decoded grayscale templates
+/// are cached, and a multi-template search converts the frame to grayscale only once.
 pub struct TemplateMatcher {
     directory: PathBuf,
     reference_width: u32,
+    template_cache: Mutex<HashMap<PathBuf, GrayImage>>,
 }
 
 impl TemplateMatcher {
     pub fn new(directory: impl Into<PathBuf>) -> Self {
-        Self { directory: directory.into(), reference_width: 2560 }
+        Self {
+            directory: directory.into(),
+            reference_width: 2560,
+            template_cache: Mutex::new(HashMap::new()),
+        }
     }
 
     pub fn with_reference_width(mut self, width: u32) -> Self {
@@ -52,14 +58,44 @@ impl TemplateMatcher {
         threshold: f32,
         region: Option<SearchRegion>,
     ) -> Result<Option<TemplateMatch>> {
-        if !(0.0..=1.0).contains(&threshold) {
-            bail!("Template threshold must be between 0 and 1");
+        validate_threshold(threshold)?;
+        let template = self.load_template(name)?;
+        let gray = frame.to_luma8();
+        self.find_gray(&gray, &template, threshold, region)
+    }
+
+    pub fn find_any(
+        &self,
+        frame: &DynamicImage,
+        names: &[&str],
+        threshold: f32,
+        region: Option<SearchRegion>,
+    ) -> Result<Option<(String, TemplateMatch)>> {
+        validate_threshold(threshold)?;
+        let gray = frame.to_luma8();
+        let mut best: Option<(String, TemplateMatch)> = None;
+        for name in names {
+            if !self.has_template(name) {
+                continue;
+            }
+            let template = self.load_template(name)?;
+            if let Some(found) = self.find_gray(&gray, &template, threshold, region)? {
+                if best.as_ref().is_none_or(|(_, current)| found.confidence > current.confidence) {
+                    best = Some(((*name).to_owned(), found));
+                }
+            }
         }
-        let path = self.template_path(name);
-        let template = image::open(&path)
-            .with_context(|| format!("Could not load template {}", path.display()))?
-            .to_luma8();
-        let (fw, fh) = (frame.width(), frame.height());
+        Ok(best)
+    }
+
+    fn find_gray(
+        &self,
+        gray: &GrayImage,
+        template: &GrayImage,
+        threshold: f32,
+        region: Option<SearchRegion>,
+    ) -> Result<Option<TemplateMatch>> {
+        let (fw, fh) = (gray.width(), gray.height());
         let region = region.unwrap_or(SearchRegion { x: 0, y: 0, width: fw, height: fh });
         if region.width == 0 || region.height == 0
             || region.x.saturating_add(region.width) > fw
@@ -74,10 +110,9 @@ impl TemplateMatcher {
         let scale = 4_u32;
         let tw = (scaled_w / scale).max(1);
         let th = (scaled_h / scale).max(1);
-        let small_template = imageops::resize(&template, tw, th, imageops::FilterType::Triangle);
+        let small_template = imageops::resize(template, tw, th, imageops::FilterType::Triangle);
 
-        let gray = frame.to_luma8();
-        let crop = imageops::crop_imm(&gray, region.x, region.y, region.width, region.height).to_image();
+        let crop = imageops::crop_imm(gray, region.x, region.y, region.width, region.height).to_image();
         let search = imageops::resize(
             &crop,
             (region.width / scale).max(1),
@@ -90,9 +125,8 @@ impl TemplateMatcher {
 
         let mut best_error = f32::MAX;
         let mut best_xy = None;
-        let step = 1_u32;
-        for y in (0..=search.height() - th).step_by(step as usize) {
-            for x in (0..=search.width() - tw).step_by(step as usize) {
+        for y in 0..=search.height() - th {
+            for x in 0..=search.width() - tw {
                 let mut error = 0_u64;
                 for ty in 0..th {
                     for tx in 0..tw {
@@ -123,23 +157,22 @@ impl TemplateMatcher {
         }))
     }
 
-    pub fn find_any(
-        &self,
-        frame: &DynamicImage,
-        names: &[&str],
-        threshold: f32,
-        region: Option<SearchRegion>,
-    ) -> Result<Option<(String, TemplateMatch)>> {
-        let mut best: Option<(String, TemplateMatch)> = None;
-        for name in names {
-            if !self.template_path(name).exists() { continue; }
-            if let Some(found) = self.find(frame, name, threshold, region)? {
-                if best.as_ref().is_none_or(|(_, current)| found.confidence > current.confidence) {
-                    best = Some(((*name).to_owned(), found));
-                }
-            }
+    fn load_template(&self, name: &str) -> Result<GrayImage> {
+        let path = self.template_path(name);
+        if let Some(cached) = self.template_cache.lock()
+            .map_err(|_| anyhow::anyhow!("Template cache lock was poisoned"))?
+            .get(&path)
+            .cloned()
+        {
+            return Ok(cached);
         }
-        Ok(best)
+        let decoded = image::open(&path)
+            .with_context(|| format!("Could not load template {}", path.display()))?
+            .to_luma8();
+        self.template_cache.lock()
+            .map_err(|_| anyhow::anyhow!("Template cache lock was poisoned"))?
+            .insert(path, decoded.clone());
+        Ok(decoded)
     }
 
     fn template_path(&self, name: &str) -> PathBuf {
@@ -147,6 +180,13 @@ impl TemplateMatcher {
         let file = Path::new(name).file_name().unwrap_or_else(|| std::ffi::OsStr::new(""));
         self.directory.join(file)
     }
+}
+
+fn validate_threshold(threshold: f32) -> Result<()> {
+    if !(0.0..=1.0).contains(&threshold) {
+        bail!("Template threshold must be between 0 and 1");
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -172,6 +212,22 @@ mod tests {
             None,
         ).unwrap();
         assert!(result.is_some());
+        let _ = std::fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn missing_optional_templates_are_reported_without_error() {
+        let dir = std::env::temp_dir().join(format!("cocbot-empty-templates-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let matcher = TemplateMatcher::new(&dir);
+        assert!(!matcher.has_template("not-present.png"));
+        let result = matcher.find_any(
+            &DynamicImage::new_rgba8(64, 64),
+            &["not-present.png"],
+            0.9,
+            None,
+        ).unwrap();
+        assert!(result.is_none());
         let _ = std::fs::remove_dir_all(dir);
     }
 }
