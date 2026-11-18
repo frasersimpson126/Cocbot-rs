@@ -47,10 +47,12 @@ impl FarmingBackend {
                 let mut tracker = LootTracker::new();
                 let mut previous_read: Option<ResourceSnapshot> = None;
                 let mut stable_count = 0_u8;
+                let mut last_ocr_error: Option<String> = None;
 
                 while !worker_stop.load(Ordering::Relaxed) {
                     match read_hud(&window, &ocr) {
                         Ok(Some(snapshot)) => {
+                            last_ocr_error = None;
                             if previous_read == Some(snapshot) {
                                 stable_count = stable_count.saturating_add(1);
                             } else {
@@ -70,11 +72,16 @@ impl FarmingBackend {
                             }
                         }
                         Ok(None) => {
+                            last_ocr_error = None;
                             stable_count = 0;
                             previous_read = None;
                         }
                         Err(error) => {
-                            let _ = events.send(BackendEvent::Status(format!("OCR read skipped: {error}")));
+                            let message = error.to_string();
+                            if last_ocr_error.as_deref() != Some(message.as_str()) {
+                                let _ = events.send(BackendEvent::Status(format!("OCR read skipped: {message}")));
+                                last_ocr_error = Some(message);
+                            }
                         }
                     }
 
