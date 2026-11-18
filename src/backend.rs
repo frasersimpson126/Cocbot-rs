@@ -1,9 +1,14 @@
 use crate::{
-    battle::{BattleState},
+    automation::AutomationEngine,
+    battle::BattleState,
+    config::{AppConfig, LootPriority},
+    deployment::{DeploymentPlanner, Viewport},
     loot::{LootTracker, ResourceSnapshot},
     ocr::{OcrEngine, OcrProfile},
     platform::GameWindow,
     pipeline::BattlePipeline,
+    raid::{RaidCoordinator, RaidPhase},
+    target::{TargetEvaluator, TargetPolicy},
     vision::SearchRegion,
 };
 use anyhow::Result;
@@ -20,6 +25,7 @@ pub enum BackendEvent {
     Connected { width: u32, height: u32 },
     LootUpdated { total: crate::loot::LootDelta, per_hour: crate::loot::LootDelta, elapsed: Duration },
     BattleUpdated { state: BattleState, confidence: f32 },
+    RaidUpdated { phase: RaidPhase, command: String },
     Status(String),
     Error(String),
     Stopped,
@@ -33,7 +39,7 @@ pub struct FarmingBackend {
 }
 
 impl FarmingBackend {
-    pub fn start(ocr: OcrEngine, events: Sender<BackendEvent>) -> Result<Self> {
+    pub fn start(ocr: OcrEngine, config: AppConfig, events: Sender<BackendEvent>) -> Result<Self> {
         let stop = Arc::new(AtomicBool::new(false));
         let worker_stop = Arc::clone(&stop);
         let worker = thread::Builder::new()
@@ -53,7 +59,7 @@ impl FarmingBackend {
                 // No opponent ROI or troop templates are configured yet. This connects
                 // live frames to state recognition without treating guessed coordinates
                 // or absent assets as evidence for an attack.
-                let mut pipeline = BattlePipeline::new(
+                let pipeline = BattlePipeline::new(
                     template_directory(width, height),
                     ocr.clone(),
                     SearchRegion { x: 0, y: 0, width: 1, height: 1 },
@@ -62,12 +68,29 @@ impl FarmingBackend {
                 .without_opponent_loot_ocr()
                 .with_stable_samples(2);
 
+                let evaluator = TargetEvaluator::new(TargetPolicy::default(), config.loot_priority);
+                let raid = match RaidCoordinator::new(
+                    config.village,
+                    config.strategy,
+                    evaluator,
+                    DeploymentPlanner::default(),
+                ) {
+                    Ok(raid) => raid,
+                    Err(error) => {
+                        let _ = events.send(BackendEvent::Error(format!("Invalid farming configuration: {error:?}")));
+                        let _ = events.send(BackendEvent::Stopped);
+                        return;
+                    }
+                };
+                let mut automation = AutomationEngine::new(pipeline, raid);
+
                 let mut tracker = LootTracker::new();
                 let mut previous_read: Option<ResourceSnapshot> = None;
                 let mut stable_count = 0_u8;
                 let mut last_ocr_error: Option<String> = None;
                 let mut last_capture_error: Option<String> = None;
                 let mut last_battle_state: Option<BattleState> = None;
+                let mut last_raid_status: Option<(RaidPhase, String)> = None;
 
                 while !worker_stop.load(Ordering::Relaxed) {
                     let frame = match window.capture() {
@@ -86,22 +109,36 @@ impl FarmingBackend {
                         }
                     };
 
-                    match pipeline.process_frame(&frame) {
+                    match automation.process_frame(&frame, Viewport { width, height }) {
                         Ok(analysis) => {
-                            if last_battle_state != Some(analysis.stable_state) {
+                            let state = analysis.perception.stable_state;
+                            if last_battle_state != Some(state) {
                                 let _ = events.send(BackendEvent::BattleUpdated {
-                                    state: analysis.stable_state,
-                                    confidence: if analysis.stable_state == BattleState::Unknown {
+                                    state,
+                                    confidence: if state == BattleState::Unknown {
                                         0.0
                                     } else {
-                                        analysis.detection.confidence
+                                        analysis.perception.detection.confidence
                                     },
                                 });
-                                last_battle_state = Some(analysis.stable_state);
+                                last_battle_state = Some(state);
+                            }
+
+                            // The coordinator is live, but commands are only surfaced to
+                            // the UI. No mouse input is sent until templates and coordinates
+                            // have been validated against real game screenshots.
+                            let command = format!("{:?}", analysis.command);
+                            let status = (automation.phase(), command);
+                            if last_raid_status.as_ref() != Some(&status) {
+                                let _ = events.send(BackendEvent::RaidUpdated {
+                                    phase: status.0,
+                                    command: status.1.clone(),
+                                });
+                                last_raid_status = Some(status);
                             }
                         }
                         Err(error) => {
-                            let _ = events.send(BackendEvent::Status(format!("Battle recognition skipped: {error}")));
+                            let _ = events.send(BackendEvent::Status(format!("Battle automation analysis skipped: {error}")));
                         }
                     }
 
