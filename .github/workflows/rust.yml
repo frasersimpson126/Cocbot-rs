@@ -1,0 +1,19 @@
+name: Rust CI
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  test-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install stable Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Compile and run unit tests
+        run: cargo test --all-targets
+      - name: Run Clippy
+        run: cargo clippy --all-targets --all-features -- -D warnings
