@@ -202,6 +202,7 @@ mod tests {
         config::LootPriority,
         loot::ResourceSnapshot,
         target::TargetPolicy,
+        vision::TemplateMatch,
     };
 
     fn coordinator() -> RaidCoordinator {
@@ -268,7 +269,18 @@ mod tests {
         raid.start(BattleState::HomeVillage).unwrap();
         raid.observe_state(BattleState::OpponentFound);
         raid.evaluate_opponent(good_target());
-        raid.observe_state(BattleState::HomeBattle);
+        let slot = TroopSlot {
+            name: "sneaky_goblin".into(),
+            bounds: TemplateMatch { x: 10, y: 10, width: 30, height: 30, confidence: 0.99 },
+        };
+        assert!(matches!(
+            raid.prepare_deployment(
+                BattleState::HomeBattle,
+                Viewport { width: 1280, height: 720 },
+                &[slot],
+            ),
+            Ok(RaidCommand::Deploy(_))
+        ));
         assert_eq!(raid.phase(), RaidPhase::InBattle);
         assert_eq!(raid.observe_state(BattleState::BattleWon), RaidCommand::ReturnToVillage);
         assert_eq!(raid.observe_state(BattleState::HomeVillage), RaidCommand::FindOpponent);
