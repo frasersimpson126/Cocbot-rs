@@ -2,7 +2,7 @@
 
 A Rust desktop rewrite of [BasePilot](https://github.com/efebolukbasi/BasePilot), scoped to Clash of Clans farming and attack automation on Windows 10/11 with Google Play Games for PC.
 
-> **Status: early development.** The current build contains the desktop shell, persistent farming preferences, attack-strategy models, and tested loot-accounting logic. It is not yet a working game bot: Windows game capture, screen recognition, troop-bar detection, input injection, and the raid state machine remain to be implemented and validated.
+> **Status: early development.** The current build contains the desktop shell, persistent farming preferences, attack-strategy models, and loot-accounting logic with unit tests. It is not yet a working game bot: Windows game capture, screen recognition, troop-bar detection, input injection, and the raid state machine remain to be implemented and validated.
 
 ## Included scope
 
