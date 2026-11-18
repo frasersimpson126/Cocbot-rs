@@ -47,13 +47,19 @@ impl BattleStateDetector {
             height: frame.height() - frame.height() / 2,
         });
 
-        // Check battle-end and in-battle anchors before home-screen controls: some
-        // interface elements remain visible behind overlays.
+        let full = None;
+        // Result overlays take precedence over controls visible behind them.
+        // Builder Base has separate anchors because its battle HUD differs.
         let candidates = [
             (&["bstar.png", "bbstar.png"][..], BattleState::BattleWon, bottom),
+            (&["defeat.png", "bbdefeat.png"][..], BattleState::BattleLost, bottom),
+            (&["opponentfound.png"][..], BattleState::OpponentFound, full),
+            (&["bbendbattle.png"][..], BattleState::BuilderBattle, bottom),
             (&["endbattle.png"][..], BattleState::HomeBattle, bottom),
+            (&["bbfindnow.png"][..], BattleState::Matchmaking, bottom),
             (&["findnow.png"][..], BattleState::Matchmaking, bottom),
-            (&["attack.png", "farmbattle.png"][..], BattleState::HomeVillage, bottom),
+            (&["bbattack.png"][..], BattleState::BuilderBase, full),
+            (&["attack.png", "farmbattle.png"][..], BattleState::HomeVillage, full),
         ];
 
         for (templates, state, region) in candidates {
