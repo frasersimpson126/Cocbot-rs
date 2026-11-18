@@ -188,7 +188,7 @@ fn parse_tsv(tsv: &str) -> (String, f32) {
         .map(|words| words.join(" "))
         .collect::<Vec<_>>()
         .join("\n");
-    let confidence = if weakest_confidence.is_finite() {
+    let confidence = if !text.is_empty() && weakest_confidence.is_finite() {
         (weakest_confidence / 100.0).clamp(0.0, 1.0)
     } else {
         0.0
