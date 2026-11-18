@@ -1,10 +1,13 @@
 use crate::{
     battle::BattleState,
+    config::Village,
     deployment::{DeploymentPattern, DeploymentPlan},
     platform::GameWindow,
+    vision::{SearchRegion, TemplateMatcher},
 };
 use anyhow::{Result, bail};
 use enigo::Enigo;
+use image::DynamicImage;
 use std::{thread, time::Duration};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -126,6 +129,63 @@ fn click_points(
         }
     }
     Ok(points.len())
+}
+
+/// Recognises and clicks the result-screen return control. A result-state check and
+/// a fresh template match are both required; the star/defeat marker itself is never
+/// used as a click target.
+pub struct ReturnHomeExecutor {
+    matcher: TemplateMatcher,
+    threshold: f32,
+}
+
+impl ReturnHomeExecutor {
+    pub fn new(matcher: TemplateMatcher) -> Self {
+        Self { matcher, threshold: 0.90 }
+    }
+
+    pub fn with_threshold(mut self, threshold: f32) -> Self {
+        self.threshold = threshold.clamp(0.0, 1.0);
+        self
+    }
+
+    pub fn execute(
+        &self,
+        window: &GameWindow,
+        input: &mut Enigo,
+        frame: &DynamicImage,
+        village: Village,
+        result_state: BattleState,
+    ) -> Result<()> {
+        if !matches!(result_state, BattleState::BattleWon | BattleState::BattleLost) {
+            bail!("Return-to-village refused: battle result has not been recognised");
+        }
+        let names: &[&str] = if village == Village::BuilderBase {
+            &["bbreturnhome.png", "returnhome.png"]
+        } else {
+            &["returnhome.png"]
+        };
+        let bottom = SearchRegion {
+            x: 0,
+            y: frame.height() / 2,
+            width: frame.width(),
+            height: frame.height() - frame.height() / 2,
+        };
+        let Some((_, button)) = self.matcher.find_any(frame, names, self.threshold, Some(bottom))? else {
+            bail!("Return-to-village button was not recognised with sufficient confidence");
+        };
+        let (width, height) = window.dimensions();
+        if button.x.saturating_add(button.width) > width
+            || button.y.saturating_add(button.height) > height
+        {
+            bail!("Return-to-village button match lies outside the game window");
+        }
+        window.click(
+            input,
+            (button.x + button.width / 2) as i32,
+            (button.y + button.height / 2) as i32,
+        )
+    }
 }
 
 #[cfg(test)]
