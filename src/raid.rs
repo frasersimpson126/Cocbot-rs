@@ -278,6 +278,19 @@ mod tests {
     }
 
     #[test]
+    fn find_now_is_not_repeated_while_the_search_screen_is_transitioning() {
+        let mut raid = coordinator();
+        raid.start(BattleState::HomeVillage).unwrap();
+        assert_eq!(raid.observe_state(BattleState::AttackMenu), RaidCommand::FindOpponent);
+        assert_eq!(raid.phase(), RaidPhase::StartingMatchmaking);
+        assert_eq!(raid.observe_state(BattleState::AttackMenu), RaidCommand::WaitForStableFrame);
+        assert_eq!(raid.observe_state(BattleState::Matchmaking), RaidCommand::WaitForStableFrame);
+        assert_eq!(raid.phase(), RaidPhase::Searching);
+        assert_eq!(raid.observe_state(BattleState::OpponentFound), RaidCommand::WaitForStableFrame);
+        assert_eq!(raid.phase(), RaidPhase::EvaluatingOpponent);
+    }
+
+    #[test]
     fn rejected_target_skips_and_returns_to_searching() {
         let mut raid = coordinator();
         raid.start(BattleState::HomeVillage).unwrap();
