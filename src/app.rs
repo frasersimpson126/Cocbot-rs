@@ -70,6 +70,8 @@ impl CocbotApp {
 
 impl eframe::App for CocbotApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Poll worker events regularly so live OCR/loot updates render without user input.
+        ctx.request_repaint_after(std::time::Duration::from_millis(100));
         loop {
             match self.event_rx.try_recv() {
                 Ok(event) => match event {
