@@ -221,7 +221,7 @@ impl eframe::App for CocbotApp {
             }
             Page::Settings => {
                 ui.heading("Settings");
-                ui.label("Tesseract executable path (optional; OCR integration is pending)");
+                ui.label("Tesseract executable path (optional; required for live loot OCR)");
                 ui.text_edit_singleline(&mut self.config.tesseract_path);
                 if ui.button("Save settings").clicked() {
                     match self.config.save() {
