@@ -1,0 +1,6 @@
+Cocbot-rs is an independent Rust rewrite informed by the public BasePilot project:
+https://github.com/efebolukbasi/BasePilot
+
+Original project author: Efe Bolukbasi.
+The original project is distributed under the MIT License reproduced in LICENSE.
+This repository is not affiliated with or endorsed by Supercell.
