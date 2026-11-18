@@ -1,7 +1,15 @@
 # Vision template assets
 
-The Rust vision backend expects grayscale-compatible PNG crops in this directory.
-No game screenshots or template images are bundled yet.
+The Rust vision backend loads one aspect-specific PNG template pack based on the
+captured game window:
+
+- `16_9/` for widescreen captures (aspect ratio above 1.70)
+- `16_10/` for 16:10 captures
+
+Place grayscale-compatible PNG crops in the matching directory. The repository
+does not currently bundle game templates. The runtime looks beside the executable
+for `assets/templates/<aspect>/`, then falls back to that relative path from the
+current working directory.
 
 ## Current screen-state template names
 
@@ -9,11 +17,10 @@ No game screenshots or template images are bundled yet.
 - `defeat.png` and `bbdefeat.png` — battle-loss result anchors
 - `opponentfound.png` — opponent preview / next action screen
 - `endbattle.png` and `bbendbattle.png` — Home Village and Builder Base battle HUD anchors
-- `findnow.png` and `bbfindnow.png` — attack-menu search controls
-- `searching.png` and `bbsearching.png` — active matchmaking indicators
-- `next.png` and `bbnext.png` — skip-opponent controls
-- `attack.png` and `farmbattle.png` — Home Village entry controls
+- `bbsearching.png` and `searching.png` — active matchmaking indicators
+- `bbfindnow.png` and `findnow.png` — attack-menu search controls
 - `bbattack.png` — Builder Base entry control
+- `attack.png` and `farmbattle.png` — Home Village entry controls
 - `returnhome.png` and `bbreturnhome.png` — result-screen return controls
 
 ## Troop icon templates
@@ -30,13 +37,16 @@ The planner currently expects these name fragments:
 
 Use tightly cropped icons from the deployment bar, excluding adjacent troop counts
 where possible. Capture separate assets for materially different game UI scales or
-ensure the template scaling has been calibrated against both 16:9 and 16:10 frames.
+ensure template scaling has been calibrated against both aspect ratios.
 
 ## Important
 
-The detector currently treats absent templates as unavailable, not as a positive match.
-Do not lower confidence thresholds to compensate for missing or poorly cropped assets.
-Recognition must be validated against real screenshots before enabling mouse deployment.
+The detector treats absent templates as unavailable, not as a positive match.
+Do not lower confidence thresholds to compensate for missing or poorly cropped
+assets. Recognition must be validated against real screenshots before enabling
+mouse deployment. Opponent-loot OCR is separately disabled until its ROI is
+calibrated against the actual game window.
 
-BasePilot is MIT-licensed. Any copied upstream asset should retain its applicable
-copyright and licence attribution.
+BasePilot is MIT-licensed. Any copied upstream code should retain its applicable
+copyright and licence attribution. Game artwork and trademarks remain the property
+of their respective owners.
