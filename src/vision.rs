@@ -143,37 +143,39 @@ impl TemplateMatcher {
 
         let mut best_confidence = -1.0_f32;
         let mut best_xy = None;
-        // Search on a 2-pixel grid in the reduced image; the UI templates are
-        // large enough that this cuts most candidate windows without material loss.
+        // Search on a 2-pixel grid in the reduced image, then refine the best
+        // candidate locally so odd-pixel offsets are not lost.
         for y in (0..=search.height() - th).step_by(2) {
             for x in (0..=search.width() - tw).step_by(2) {
-                let mut image_sum = 0.0_f64;
-                let mut image_square_sum = 0.0_f64;
-                let mut cross_sum = 0.0_f64;
-                for ty in 0..th {
-                    for tx in 0..tw {
-                        let a = search.get_pixel(x + tx, y + ty)[0] as f64;
-                        let b = small_template.get_pixel(tx, ty)[0] as f64;
-                        image_sum += a;
-                        image_square_sum += a * a;
-                        cross_sum += a * b;
+                if let Some(confidence) = normalized_correlation(
+                    &search, &small_template, x, y, template_sum, template_variance, count,
+                ) {
+                    if confidence > best_confidence {
+                        best_confidence = confidence;
+                        best_xy = Some((x, y));
                     }
-                }
-                let image_variance = image_square_sum - image_sum * image_sum / count;
-                if image_variance <= 1.0e-6 {
-                    continue;
-                }
-                let covariance = cross_sum - image_sum * template_sum / count;
-                let correlation = covariance / (image_variance * template_variance).sqrt();
-                let confidence = correlation.clamp(0.0, 1.0) as f32;
-                if confidence > best_confidence {
-                    best_confidence = confidence;
-                    best_xy = Some((x, y));
                 }
             }
         }
 
-        let Some((x, y)) = best_xy else { return Ok(None) };
+        let Some((coarse_x, coarse_y)) = best_xy else { return Ok(None) };
+        let max_x = search.width() - tw;
+        let max_y = search.height() - th;
+        let mut best_xy = (coarse_x, coarse_y);
+        for y in coarse_y.saturating_sub(1)..=(coarse_y + 1).min(max_y) {
+            for x in coarse_x.saturating_sub(1)..=(coarse_x + 1).min(max_x) {
+                if let Some(confidence) = normalized_correlation(
+                    &search, &small_template, x, y, template_sum, template_variance, count,
+                ) {
+                    if confidence > best_confidence {
+                        best_confidence = confidence;
+                        best_xy = (x, y);
+                    }
+                }
+            }
+        }
+
+        let (x, y) = best_xy;
         let confidence = best_confidence;
         if confidence < threshold {
             return Ok(None);
@@ -210,6 +212,36 @@ impl TemplateMatcher {
         let file = Path::new(name).file_name().unwrap_or_else(|| std::ffi::OsStr::new(""));
         self.directory.join(file)
     }
+}
+
+fn normalized_correlation(
+    search: &GrayImage,
+    template: &GrayImage,
+    x: u32,
+    y: u32,
+    template_sum: f64,
+    template_variance: f64,
+    count: f64,
+) -> Option<f32> {
+    let mut image_sum = 0.0_f64;
+    let mut image_square_sum = 0.0_f64;
+    let mut cross_sum = 0.0_f64;
+    for ty in 0..template.height() {
+        for tx in 0..template.width() {
+            let a = search.get_pixel(x + tx, y + ty)[0] as f64;
+            let b = template.get_pixel(tx, ty)[0] as f64;
+            image_sum += a;
+            image_square_sum += a * a;
+            cross_sum += a * b;
+        }
+    }
+    let image_variance = image_square_sum - image_sum * image_sum / count;
+    if image_variance <= 1.0e-6 {
+        return None;
+    }
+    let covariance = cross_sum - image_sum * template_sum / count;
+    let correlation = covariance / (image_variance * template_variance).sqrt();
+    Some(correlation.clamp(0.0, 1.0) as f32)
 }
 
 fn validate_threshold(threshold: f32) -> Result<()> {
