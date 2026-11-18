@@ -1,11 +1,16 @@
 mod app;
 mod config;
+mod loot;
+mod strategy;
 
 use anyhow::Result;
 
 fn main() -> Result<()> {
     tracing_subscriber::fmt()
-        .with_env_filter(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
+        .with_env_filter(
+            tracing_subscriber::EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| "info".into()),
+        )
         .init();
 
     let config = config::AppConfig::load()?;
@@ -20,5 +25,6 @@ fn main() -> Result<()> {
         "Cocbot-rs",
         options,
         Box::new(move |cc| Ok(Box::new(app::CocbotApp::new(cc, config)))),
-    ).map_err(|e| anyhow::anyhow!("GUI failed: {e}"))
+    )
+    .map_err(|error| anyhow::anyhow!("GUI failed: {error}"))
 }
