@@ -9,7 +9,9 @@ No game screenshots or template images are bundled yet.
 - `defeat.png` and `bbdefeat.png` — battle-loss result anchors
 - `opponentfound.png` — opponent preview / next action screen
 - `endbattle.png` and `bbendbattle.png` — Home Village and Builder Base battle HUD anchors
-- `findnow.png` and `bbfindnow.png` — matchmaking controls
+- `findnow.png` and `bbfindnow.png` — attack-menu search controls
+- `searching.png` and `bbsearching.png` — active matchmaking indicators
+- `next.png` and `bbnext.png` — skip-opponent controls
 - `attack.png` and `farmbattle.png` — Home Village entry controls
 - `bbattack.png` — Builder Base entry control
 - `returnhome.png` and `bbreturnhome.png` — result-screen return controls
