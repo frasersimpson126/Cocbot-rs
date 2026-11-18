@@ -2,7 +2,7 @@
 
 A Rust desktop rewrite of [BasePilot](https://github.com/efebolukbasi/BasePilot), scoped to Clash of Clans farming and attack automation on Windows 10/11 with Google Play Games for PC.
 
-> **Status: backend in progress.** The project now includes window capture, mouse-input primitives, Tesseract HUD OCR, resource tracking, template matching, battle-state recognition, loot target scoring, a raid workflow coordinator, and a guarded mouse deployment executor. Template assets are not yet bundled, the recognition pipeline is not connected to farming, and no attack clicks are issued. Start farming remains disabled until these pieces are implemented and validated.
+> **Status: backend in progress.** The project now includes window capture, mouse-input primitives, Tesseract HUD OCR, resource tracking, template matching, battle-state recognition, loot target scoring, a raid workflow coordinator, a guarded mouse deployment executor, and an integrated perception pipeline. Template assets are not yet bundled and the pipeline is not connected to the farming UI; live automation remains disabled. Start farming remains disabled until these pieces are implemented and validated.
 
 ## Included scope
 
@@ -32,7 +32,8 @@ src/
 ├── target.rs      confidence-gated loot target scoring
 ├── deployment.rs  battle-state and troop-gated deployment plan generation
 ├── raid.rs        continuous raid state machine and target decisions
-├── executor.rs    validated troop selection and deployment input
+├── executor.rs    validated troop selection, navigation and return input
+├── pipeline.rs    state, opponent-loot and troop-bar perception pipeline
 └── main.rs        application entry point
 ```
 
@@ -45,8 +46,9 @@ The resource HUD is cropped before OCR instead of passing the full game frame to
 - Numeric whitelist (`0123456789l`)
 - Numeric mode enabled and dictionaries disabled
 - One OpenMP worker thread to reduce thread startup overhead
+- TSV output to extract per-word confidence in the same OCR invocation
 
-The OCR process receives the cropped PNG through stdin, so no temporary image files are created. Set the Tesseract executable path in Settings if it is not available on PATH. These settings are starting values based on BasePilot's HUD pipeline; they still need validation against screenshots from different game resolutions and UI scaling.
+The OCR process receives the cropped PNG through stdin, so no temporary image files are created. Word-level confidence is reduced to the weakest recognised word before a loot candidate can be accepted. Set the Tesseract executable path in Settings if it is not available on PATH. These settings are starting values based on BasePilot's HUD pipeline; they still need validation against screenshots from different game resolutions and UI scaling.
 
 ## Build
 
@@ -65,10 +67,10 @@ Tesseract 5 must also be installed for live resource OCR. The Windows desktop ca
 
 1. Add the required upstream screen templates under `assets/templates/` and validate them at 16:9 and 16:10.
 2. Calibrate recognition thresholds against real game screenshots; the current matcher is a foundation, not a validated detector.
-3. Complete Home Village and Builder Base state recognition and troop/hero inventory detection.
-4. Connect the raid coordinator and deployment executor to the live capture worker with cancellation and fresh-frame checks.
-5. Complete troop/hero/spell recognition and strategy-specific secondary deployment actions.
-6. Validate battle completion, retreat/return controls, and recovery paths against real screenshots before enabling Start farming.
+3. Add and calibrate the screen and troop templates; current detectors are only as reliable as these assets.
+4. Connect the perception pipeline, raid coordinator and executors to the live capture worker with cancellation and fresh-frame checks.
+5. Complete hero, siege machine and spell recognition and strategy-specific secondary deployment actions.
+6. Validate every navigation/deployment/return action against real screenshots and recovery paths before enabling Start farming.
 
 ## Terms and attribution
 
