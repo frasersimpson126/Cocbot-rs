@@ -1,7 +1,7 @@
 use crate::{
     loot::{LootTracker, ResourceSnapshot},
     ocr::{OcrEngine, OcrProfile},
-    platform::{create_input, GameWindow},
+    platform::GameWindow,
 };
 use anyhow::Result;
 use image::{imageops, DynamicImage};
@@ -29,23 +29,21 @@ pub struct FarmingBackend {
 
 impl FarmingBackend {
     pub fn start(ocr: OcrEngine, events: Sender<BackendEvent>) -> Result<Self> {
-        let window = GameWindow::find()?;
         let stop = Arc::new(AtomicBool::new(false));
         let worker_stop = Arc::clone(&stop);
         let worker = thread::Builder::new()
             .name("cocbot-backend".into())
             .spawn(move || {
-                let (width, height) = window.dimensions();
-                let _ = events.send(BackendEvent::Connected { width, height });
-                let _input = match create_input() {
-                    Ok(input) => input,
+                let window = match GameWindow::find() {
+                    Ok(window) => window,
                     Err(error) => {
                         let _ = events.send(BackendEvent::Error(error.to_string()));
                         let _ = events.send(BackendEvent::Stopped);
                         return;
                     }
                 };
-
+                let (width, height) = window.dimensions();
+                let _ = events.send(BackendEvent::Connected { width, height });
                 let mut tracker = LootTracker::new();
                 let mut previous_read: Option<ResourceSnapshot> = None;
                 let mut stable_count = 0_u8;
