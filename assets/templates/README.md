@@ -5,10 +5,13 @@ No game screenshots or template images are bundled yet.
 
 ## Current screen-state template names
 
-- `bstar.png` and `bbstar.png` — battle-result star anchors
-- `endbattle.png` — in-battle end/retreat control
-- `findnow.png` — matchmaking control
+- `bstar.png` and `bbstar.png` — battle-win result anchors
+- `defeat.png` and `bbdefeat.png` — battle-loss result anchors
+- `opponentfound.png` — opponent preview / next action screen
+- `endbattle.png` and `bbendbattle.png` — Home Village and Builder Base battle HUD anchors
+- `findnow.png` and `bbfindnow.png` — matchmaking controls
 - `attack.png` and `farmbattle.png` — Home Village entry controls
+- `bbattack.png` — Builder Base entry control
 
 ## Troop icon templates
 
