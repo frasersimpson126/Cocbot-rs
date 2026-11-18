@@ -2,7 +2,7 @@
 
 A Rust desktop rewrite of [BasePilot](https://github.com/efebolukbasi/BasePilot), scoped to Clash of Clans farming and attack automation on Windows 10/11 with Google Play Games for PC.
 
-> **Status: backend in progress.** The application now has Windows desktop-window capture, mouse-input primitives, a Tesseract OCR engine, and continuous resource-HUD monitoring. Automated troop recognition, attack deployment, battle-state handling, and end-to-end farming are not complete. The Start farming action remains disabled until those pieces are implemented and tested.
+> **Status: backend in progress.** The application now has Windows desktop-window capture, mouse-input primitives, a Tesseract OCR engine, and continuous resource-HUD monitoring. Template-matching and battle-recognition foundations have been added, but the template assets are not yet bundled and the recognition pipeline is not connected to farming. The Start farming action remains disabled until those pieces are implemented and tested.
 
 ## Included scope
 
