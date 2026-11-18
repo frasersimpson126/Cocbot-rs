@@ -41,6 +41,9 @@ impl TargetCandidate {
     /// Parses the three vertically ordered resource counters using the same tolerant
     /// digit parser as the live HUD reader. The caller supplies the OCR confidence.
     pub fn from_ocr_text(text: &str, confidence: f32) -> Option<Self> {
+        if !confidence.is_finite() || !(0.0..=1.0).contains(&confidence) {
+            return None;
+        }
         let [gold, elixir, dark_elixir] = OcrEngine::parse_hud_triplet(text)?;
         Some(Self {
             loot: ResourceSnapshot { gold, elixir, dark_elixir },
@@ -172,6 +175,12 @@ mod tests {
     #[test]
     fn malformed_ocr_does_not_produce_a_candidate() {
         assert!(TargetCandidate::from_ocr_text("1,200,000\n850000", 0.99).is_none());
+    }
+
+    #[test]
+    fn invalid_confidence_does_not_produce_a_candidate() {
+        assert!(TargetCandidate::from_ocr_text("1\n2\n3", f32::NAN).is_none());
+        assert!(TargetCandidate::from_ocr_text("1\n2\n3", 1.1).is_none());
     }
 
     #[test]
