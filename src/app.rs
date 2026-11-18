@@ -97,6 +97,10 @@ impl eframe::App for CocbotApp {
             }
             Page::Farming => {
                 ui.heading("Farming");
+                let builder_base = self.config.village == Village::BuilderBase;
+                if self.config.strategy.is_builder_base() != builder_base {
+                    self.config.strategy = if builder_base { ArmyStrategy::BuilderBaseBabyDragon } else { ArmyStrategy::SneakyGoblin };
+                }
                 egui::Grid::new("farming_settings").num_columns(2).spacing([16.0, 12.0]).show(ui, |ui| {
                     ui.label("Village");
                     egui::ComboBox::from_id_salt("village")
@@ -115,7 +119,9 @@ impl eframe::App for CocbotApp {
                         .selected_text(self.config.strategy.label())
                         .show_ui(ui, |ui| {
                             for strategy in ArmyStrategy::ALL {
-                                ui.selectable_value(&mut self.config.strategy, strategy, strategy.label());
+                                if strategy.is_builder_base() == builder_base {
+                                    ui.selectable_value(&mut self.config.strategy, strategy, strategy.label());
+                                }
                             }
                         });
                     ui.end_row();
