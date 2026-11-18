@@ -104,7 +104,8 @@ impl OcrEngine {
                 // HUD counters are light digits on dark translucent panels. Invert to
                 // Tesseract's preferred dark-on-light polarity, then binarise.
                 let gray = image.to_luma8();
-                let mut inverted: GrayImage = imageops::invert(&gray);
+                let mut inverted: GrayImage = gray.clone();
+                imageops::invert(&mut inverted);
                 for pixel in inverted.pixels_mut() {
                     pixel.0[0] = if pixel.0[0] >= self.threshold { 255 } else { 0 };
                 }
