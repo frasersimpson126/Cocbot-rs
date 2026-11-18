@@ -206,7 +206,7 @@ impl RaidCoordinator {
         Ok(RaidCommand::Deploy(plan))
     }
 
-    /// Call only after the input executor confirms that the deployment gesture began.
+    /// Call only after the input executor confirms the deployment gesture was sent.
     pub fn confirm_deployment_started(&mut self, state: BattleState) -> Result<(), RaidError> {
         let expected = if self.village == Village::BuilderBase {
             BattleState::BuilderBattle
