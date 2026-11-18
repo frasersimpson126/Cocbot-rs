@@ -123,28 +123,54 @@ impl TemplateMatcher {
             return Ok(None);
         }
 
-        let mut best_error = f32::MAX;
+        // MatchTemplate's CCOEFF_NORMED metric: subtract local means and
+        // normalise by both image variances. This is less sensitive to brightness
+        // changes than raw absolute pixel error.
+        let count = (tw * th) as f64;
+        let mut template_sum = 0.0_f64;
+        let mut template_square_sum = 0.0_f64;
+        for pixel in small_template.pixels() {
+            let value = pixel[0] as f64;
+            template_sum += value;
+            template_square_sum += value * value;
+        }
+        let template_variance = template_square_sum - template_sum * template_sum / count;
+        if template_variance <= 1.0e-6 {
+            return Ok(None);
+        }
+
+        let mut best_confidence = -1.0_f32;
         let mut best_xy = None;
         for y in 0..=search.height() - th {
             for x in 0..=search.width() - tw {
-                let mut error = 0_u64;
+                let mut image_sum = 0.0_f64;
+                let mut image_square_sum = 0.0_f64;
+                let mut cross_sum = 0.0_f64;
                 for ty in 0..th {
                     for tx in 0..tw {
-                        let a = search.get_pixel(x + tx, y + ty)[0] as i16;
-                        let b = small_template.get_pixel(tx, ty)[0] as i16;
-                        error += (a - b).unsigned_abs() as u64;
+                        let a = search.get_pixel(x + tx, y + ty)[0] as f64;
+                        let b = small_template.get_pixel(tx, ty)[0] as f64;
+                        image_sum += a;
+                        image_square_sum += a * a;
+                        cross_sum += a * b;
                     }
                 }
-                let mean_error = error as f32 / (tw * th) as f32 / 255.0;
-                if mean_error < best_error {
-                    best_error = mean_error;
+                let image_variance = image_square_sum - image_sum * image_sum / count;
+                if image_variance <= 1.0e-6 {
+                    continue;
+                }
+                let covariance = cross_sum - image_sum * template_sum / count;
+                let correlation = covariance / (image_variance * template_variance).sqrt();
+                let confidence = ((correlation + 1.0) * 0.5).clamp(0.0, 1.0) as f32;
+                if confidence > best_confidence {
+                    best_confidence = confidence;
                     best_xy = Some((x, y));
                 }
             }
         }
 
         let Some((x, y)) = best_xy else { return Ok(None) };
-        let confidence = (1.0 - best_error).clamp(0.0, 1.0);
+        let confidence = best_confidence;
         if confidence < threshold {
             return Ok(None);
         }
