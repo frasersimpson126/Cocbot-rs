@@ -6,6 +6,7 @@ use image::DynamicImage;
 pub enum BattleState {
     HomeVillage,
     BuilderBase,
+    AttackMenu,
     Matchmaking,
     OpponentFound,
     HomeBattle,
@@ -56,8 +57,10 @@ impl BattleStateDetector {
             (&["opponentfound.png"][..], BattleState::OpponentFound, full),
             (&["bbendbattle.png"][..], BattleState::BuilderBattle, bottom),
             (&["endbattle.png"][..], BattleState::HomeBattle, bottom),
-            (&["bbfindnow.png"][..], BattleState::Matchmaking, bottom),
-            (&["findnow.png"][..], BattleState::Matchmaking, bottom),
+            (&["bbsearching.png"][..], BattleState::Matchmaking, full),
+            (&["searching.png"][..], BattleState::Matchmaking, full),
+            (&["bbfindnow.png"][..], BattleState::AttackMenu, bottom),
+            (&["findnow.png"][..], BattleState::AttackMenu, bottom),
             (&["bbattack.png"][..], BattleState::BuilderBase, full),
             (&["attack.png", "farmbattle.png"][..], BattleState::HomeVillage, full),
         ];
