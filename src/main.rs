@@ -1,7 +1,7 @@
 mod app;
-mod config;
-mod loot;
-mod strategy;
+pub mod config;
+pub mod loot;
+pub mod strategy;
 
 use anyhow::Result;
 
