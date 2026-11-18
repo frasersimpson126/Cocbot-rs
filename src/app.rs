@@ -86,7 +86,7 @@ impl eframe::App for CocbotApp {
                     BackendEvent::Stopped => {
                         self.backend_status = "Monitoring stopped".into();
                         self.logs.push("Game monitoring stopped.".into());
-                        self.backend.take();
+                        let _ = self.backend.take();
                     }
                 },
                 Err(TryRecvError::Empty) => break,
