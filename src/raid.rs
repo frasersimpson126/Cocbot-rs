@@ -51,6 +51,7 @@ pub struct RaidCoordinator {
     evaluator: TargetEvaluator,
     planner: DeploymentPlanner,
     last_evaluation: Option<TargetEvaluation>,
+    paused_from: Option<RaidPhase>,
 }
 
 impl RaidCoordinator {
@@ -70,6 +71,7 @@ impl RaidCoordinator {
             evaluator,
             planner,
             last_evaluation: None,
+            paused_from: None,
         })
     }
 
@@ -228,28 +230,76 @@ impl RaidCoordinator {
     }
 
     pub fn pause(&mut self) {
-        self.phase = RaidPhase::Paused;
+        if self.phase != RaidPhase::Paused {
+            self.paused_from = Some(self.phase);
+            self.phase = RaidPhase::Paused;
+        }
     }
 
     pub fn resume(&mut self, state: BattleState) -> RaidCommand {
         if self.phase != RaidPhase::Paused {
             return RaidCommand::None;
         }
-        let expected_home = if self.village == Village::BuilderBase {
+        let previous = self.paused_from.take().unwrap_or(RaidPhase::Idle);
+        let home_state = if self.village == Village::BuilderBase {
             BattleState::BuilderBase
         } else {
             BattleState::HomeVillage
         };
-        if state == expected_home {
-            self.phase = RaidPhase::Searching;
-            RaidCommand::OpenAttackMenu
+        let battle_state = if self.village == Village::BuilderBase {
+            BattleState::BuilderBattle
         } else {
-            RaidCommand::WaitForStableFrame
+            BattleState::HomeBattle
+        };
+        match (previous, state) {
+            (RaidPhase::InBattle, current) if current == battle_state => {
+                self.phase = RaidPhase::InBattle;
+                RaidCommand::WaitForStableFrame
+            }
+            (RaidPhase::AwaitingReturn, BattleState::BattleWon | BattleState::BattleLost) => {
+                self.phase = RaidPhase::AwaitingReturn;
+                RaidCommand::ReturnToVillage
+            }
+            (RaidPhase::AwaitingDeployment | RaidPhase::DeploymentPrepared, current)
+                if current == battle_state =>
+            {
+                self.phase = RaidPhase::AwaitingDeployment;
+                RaidCommand::WaitForStableFrame
+            }
+            (RaidPhase::SkippingOpponent, BattleState::OpponentFound) => {
+                self.phase = RaidPhase::SkippingOpponent;
+                RaidCommand::WaitForStableFrame
+            }
+            (RaidPhase::StartingMatchmaking, BattleState::AttackMenu | BattleState::Matchmaking) => {
+                self.phase = RaidPhase::StartingMatchmaking;
+                RaidCommand::WaitForStableFrame
+            }
+            (_, current) if current == home_state => {
+                self.phase = RaidPhase::Searching;
+                RaidCommand::OpenAttackMenu
+            }
+            (_, BattleState::AttackMenu) => {
+                self.phase = RaidPhase::Searching;
+                RaidCommand::FindOpponent
+            }
+            (_, BattleState::Matchmaking) => {
+                self.phase = RaidPhase::Searching;
+                RaidCommand::WaitForStableFrame
+            }
+            (_, BattleState::OpponentFound) => {
+                self.phase = RaidPhase::EvaluatingOpponent;
+                RaidCommand::WaitForStableFrame
+            }
+            _ => {
+                self.paused_from = Some(previous);
+                RaidCommand::WaitForStableFrame
+            }
         }
     }
 
     pub fn stop(&mut self) -> RaidCommand {
         self.phase = RaidPhase::Idle;
+        self.paused_from = None;
         self.last_evaluation = None;
         RaidCommand::RaidFinished
     }
