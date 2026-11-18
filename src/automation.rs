@@ -42,6 +42,9 @@ impl AutomationEngine {
     ) -> Result<AutomationFrame> {
         let perception = self.pipeline.process_frame(frame)?;
         let command = match self.raid.phase() {
+            // Monitoring and recognition must not implicitly start a farming session.
+            // The UI must explicitly start a raid before commands can be planned.
+            RaidPhase::Idle => RaidCommand::None,
             RaidPhase::EvaluatingOpponent => {
                 if let Some(candidate) = perception.opponent_loot {
                     self.raid.evaluate_opponent(candidate)
