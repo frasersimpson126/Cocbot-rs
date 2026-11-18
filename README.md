@@ -27,6 +27,8 @@ src/
 ├── ocr.rs       Tesseract 5 profiles and HUD text parsing
 ├── platform.rs  desktop window capture and mouse input
 ├── strategy.rs  supported army strategy definitions and deployment plans
+├── vision.rs    resolution-scaled template matching
+├── battle.rs    battle-state and deployment-bar recognition
 └── main.rs      application entry point
 ```
 
@@ -57,11 +59,11 @@ Tesseract 5 must also be installed for live resource OCR. The Windows desktop ca
 
 ## Remaining backend work
 
-1. Add and validate the upstream screen templates for both supported aspect ratios.
-2. Implement troop-bar and battle-state recognition.
-3. Port Home Village and Builder Base attack state machines and deployment geometry.
-4. Connect resource snapshots to verified before/after raid boundaries.
-5. Add recovery handling and end-to-end tests before enabling Start farming.
+1. Add the required upstream screen templates under `assets/templates/` and validate them at 16:9 and 16:10.
+2. Calibrate recognition thresholds against real game screenshots; the current matcher is a foundation, not a validated detector.
+3. Complete Home Village and Builder Base state recognition and troop/hero inventory detection.
+4. Implement target evaluation, deployment sequencing, battle completion detection, and return-to-farming transitions.
+5. Connect resource snapshots to verified raid boundaries and add recovery/end-to-end tests before enabling Start farming.
 
 ## Terms and attribution
 
