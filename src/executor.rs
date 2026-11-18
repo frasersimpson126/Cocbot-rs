@@ -4,6 +4,7 @@ use crate::{
     deployment::{DeploymentPattern, DeploymentPlan},
     platform::GameWindow,
     vision::{SearchRegion, TemplateMatcher},
+    raid::RaidCommand,
 };
 use anyhow::{Result, bail};
 use enigo::Enigo;
@@ -215,6 +216,88 @@ impl ReturnHomeExecutor {
             (button.x + button.width / 2) as i32,
             (button.y + button.height / 2) as i32,
         )
+    }
+}
+
+/// Handles the menu-level transitions around matchmaking. Each action requires the
+/// exact expected screen state and a fresh, high-confidence button template match.
+pub struct RaidNavigationExecutor {
+    matcher: TemplateMatcher,
+    threshold: f32,
+}
+
+impl RaidNavigationExecutor {
+    pub fn new(matcher: TemplateMatcher) -> Self {
+        Self { matcher, threshold: 0.90 }
+    }
+
+    pub fn with_threshold(mut self, threshold: f32) -> Self {
+        self.threshold = threshold.clamp(0.0, 1.0);
+        self
+    }
+
+    pub fn execute(
+        &self,
+        window: &GameWindow,
+        input: &mut Enigo,
+        frame: &DynamicImage,
+        village: Village,
+        state: BattleState,
+        command: &RaidCommand,
+    ) -> Result<()> {
+        let (names, expected_state, region) = match command {
+            RaidCommand::OpenAttackMenu => {
+                let names: &[&str] = if village == Village::BuilderBase {
+                    &["bbattack.png"]
+                } else {
+                    &["attack.png", "farmbattle.png"]
+                };
+                (names, if village == Village::BuilderBase { BattleState::BuilderBase } else { BattleState::HomeVillage }, None)
+            }
+            RaidCommand::FindOpponent => {
+                let names: &[&str] = if village == Village::BuilderBase {
+                    &["bbfindnow.png"]
+                } else {
+                    &["findnow.png"]
+                };
+                (names, BattleState::AttackMenu, Some(bottom_region(frame)))
+            }
+            RaidCommand::SkipOpponent => {
+                let names: &[&str] = if village == Village::BuilderBase {
+                    &["bbnext.png", "next.png"]
+                } else {
+                    &["next.png"]
+                };
+                (names, BattleState::OpponentFound, Some(bottom_region(frame)))
+            }
+            _ => bail!("Command is not a matchmaking navigation action"),
+        };
+        if state != expected_state {
+            bail!("Navigation refused: current screen does not match the requested action");
+        }
+        let Some((_, button)) = self.matcher.find_any(frame, names, self.threshold, region)? else {
+            bail!("Navigation button was not recognised with sufficient confidence");
+        };
+        let (width, height) = window.dimensions();
+        if button.x.saturating_add(button.width) > width
+            || button.y.saturating_add(button.height) > height
+        {
+            bail!("Navigation button match lies outside the game window");
+        }
+        window.click(
+            input,
+            (button.x + button.width / 2) as i32,
+            (button.y + button.height / 2) as i32,
+        )
+    }
+}
+
+fn bottom_region(frame: &DynamicImage) -> SearchRegion {
+    SearchRegion {
+        x: 0,
+        y: frame.height() / 2,
+        width: frame.width(),
+        height: frame.height() - frame.height() / 2,
     }
 }
 
