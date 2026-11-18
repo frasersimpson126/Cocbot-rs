@@ -9,6 +9,7 @@ use crate::{
 use anyhow::Result;
 use image::{imageops, DynamicImage};
 use std::{
+    path::PathBuf,
     sync::{atomic::{AtomicBool, Ordering}, mpsc::Sender, Arc},
     thread::{self, JoinHandle},
     time::Duration,
@@ -53,7 +54,7 @@ impl FarmingBackend {
                 // live frames to state recognition without treating guessed coordinates
                 // or absent assets as evidence for an attack.
                 let mut pipeline = BattlePipeline::new(
-                    "assets/templates",
+                    template_directory(width, height),
                     ocr.clone(),
                     SearchRegion { x: 0, y: 0, width: 1, height: 1 },
                     Vec::new(),
@@ -158,6 +159,26 @@ impl Drop for FarmingBackend {
     fn drop(&mut self) {
         self.stop();
     }
+}
+
+
+/// Resolve the aspect-specific template pack beside the executable first, then from
+/// the current working directory. This keeps packaged builds independent of launch cwd.
+fn template_directory(width: u32, height: u32) -> PathBuf {
+    let aspect_directory = if width as f32 / height.max(1) as f32 > 1.70 {
+        "16_9"
+    } else {
+        "16_10"
+    };
+    if let Ok(executable) = std::env::current_exe()
+        && let Some(directory) = executable.parent()
+    {
+        let candidate = directory.join("assets").join("templates").join(aspect_directory);
+        if candidate.is_dir() {
+            return candidate;
+        }
+    }
+    PathBuf::from("assets").join("templates").join(aspect_directory)
 }
 
 fn sleep_interruptibly(stop: &AtomicBool, duration: Duration) {
