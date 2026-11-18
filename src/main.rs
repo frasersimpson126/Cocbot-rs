@@ -1,6 +1,7 @@
 mod app;
 pub mod config;
 pub mod loot;
+pub mod ocr;
 pub mod strategy;
 
 use anyhow::Result;
