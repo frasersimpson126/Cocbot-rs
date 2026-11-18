@@ -1,5 +1,6 @@
 use crate::{
     config::{AppConfig, LootPriority, Village},
+    battle::BattleState,
     loot::{LootTracker, LootDelta},
     backend::{BackendEvent, FarmingBackend},
     ocr::OcrEngine,
@@ -23,6 +24,7 @@ pub struct CocbotApp {
     loot: LootTracker,
     backend: Option<FarmingBackend>,
     backend_status: String,
+    battle_status: String,
     backend_loot: Option<(LootDelta, LootDelta)>,
     backend_elapsed: Option<std::time::Duration>,
     event_tx: Sender<BackendEvent>,
@@ -42,6 +44,7 @@ impl CocbotApp {
             loot: LootTracker::new(),
             backend: None,
             backend_status: "Not connected".into(),
+            battle_status: "Not available".into(),
             backend_loot: None,
             backend_elapsed: None,
             event_tx,
@@ -78,6 +81,10 @@ impl eframe::App for CocbotApp {
                     BackendEvent::Connected { width, height } => {
                         self.backend_status = format!("Connected — {width}×{height}");
                         self.logs.push(self.backend_status.clone());
+                    }
+                    BackendEvent::BattleUpdated { state, confidence } => {
+                        self.battle_status = format!("{} ({:.0}% confidence)", battle_state_label(state), confidence * 100.0);
+                        self.logs.push(format!("Battle screen: {}", battle_state_label(state)));
                     }
                     BackendEvent::LootUpdated { total, per_hour, elapsed } => {
                         self.backend_loot = Some((total, per_hour));
@@ -184,6 +191,7 @@ impl eframe::App for CocbotApp {
                 });
                 ui.add_space(12.0);
                 ui.label(format!("Selected strategy is intended for: {}", self.config.strategy.village_label()));
+                ui.label(format!("Recognised battle screen: {}", self.battle_status));
                 ui.label("Farming is designed to continue until manually stopped; there is no run timer.");
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
@@ -212,7 +220,7 @@ impl eframe::App for CocbotApp {
                         backend.stop();
                     }
                 });
-                ui.label("Loot monitoring uses live game capture and Tesseract OCR. Automated troop deployment is not connected yet.");
+                ui.label("Live capture feeds both HUD OCR and battle-state recognition. Screen templates, opponent loot crops and troop icons still require calibration; automated input remains disabled.");
                 ui.add_enabled(false, egui::Button::new("Start farming — attack engine pending"));
                 if ui.button("Save farming settings").clicked() {
                     match self.config.save() {
@@ -241,5 +249,20 @@ impl eframe::App for CocbotApp {
                 });
             }
         });
+    }
+}
+
+fn battle_state_label(state: BattleState) -> &'static str {
+    match state {
+        BattleState::HomeVillage => "Home Village",
+        BattleState::BuilderBase => "Builder Base",
+        BattleState::AttackMenu => "Attack menu",
+        BattleState::Matchmaking => "Matchmaking",
+        BattleState::OpponentFound => "Opponent found",
+        BattleState::HomeBattle => "Home Village battle",
+        BattleState::BuilderBattle => "Builder Base battle",
+        BattleState::BattleWon => "Battle won",
+        BattleState::BattleLost => "Battle lost",
+        BattleState::Unknown => "Unknown — templates required",
     }
 }
