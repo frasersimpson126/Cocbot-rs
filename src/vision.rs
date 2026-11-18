@@ -79,10 +79,10 @@ impl TemplateMatcher {
                 continue;
             }
             let template = self.load_template(name)?;
-            if let Some(found) = self.find_gray(&gray, &template, threshold, region)? {
-                if best.as_ref().is_none_or(|(_, current)| found.confidence > current.confidence) {
-                    best = Some(((*name).to_owned(), found));
-                }
+            if let Some(found) = self.find_gray(&gray, &template, threshold, region)?
+                && best.as_ref().is_none_or(|(_, current)| found.confidence > current.confidence)
+            {
+                best = Some(((*name).to_owned(), found));
             }
         }
         Ok(best)
@@ -149,11 +149,10 @@ impl TemplateMatcher {
             for x in (0..=search.width() - tw).step_by(2) {
                 if let Some(confidence) = normalized_correlation(
                     &search, &small_template, x, y, template_sum, template_variance, count,
-                ) {
-                    if confidence > best_confidence {
-                        best_confidence = confidence;
-                        best_xy = Some((x, y));
-                    }
+                ) && confidence > best_confidence
+                {
+                    best_confidence = confidence;
+                    best_xy = Some((x, y));
                 }
             }
         }
@@ -166,11 +165,10 @@ impl TemplateMatcher {
             for x in coarse_x.saturating_sub(1)..=(coarse_x + 1).min(max_x) {
                 if let Some(confidence) = normalized_correlation(
                     &search, &small_template, x, y, template_sum, template_variance, count,
-                ) {
-                    if confidence > best_confidence {
-                        best_confidence = confidence;
-                        best_xy = (x, y);
-                    }
+                ) && confidence > best_confidence
+                {
+                    best_confidence = confidence;
+                    best_xy = (x, y);
                 }
             }
         }
