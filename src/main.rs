@@ -12,6 +12,7 @@ pub mod deployment;
 pub mod raid;
 pub mod executor;
 pub mod pipeline;
+pub mod automation;
 
 use anyhow::Result;
 
