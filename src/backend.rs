@@ -14,7 +14,7 @@ use std::{
 #[derive(Debug, Clone)]
 pub enum BackendEvent {
     Connected { width: u32, height: u32 },
-    LootUpdated { total: crate::loot::LootDelta, per_hour: crate::loot::LootDelta },
+    LootUpdated { total: crate::loot::LootDelta, per_hour: crate::loot::LootDelta, elapsed: Duration },
     Status(String),
     Error(String),
     Stopped,
@@ -64,6 +64,7 @@ impl FarmingBackend {
                                 let _ = events.send(BackendEvent::LootUpdated {
                                     total: summary.total,
                                     per_hour: summary.per_hour,
+                                    elapsed: summary.elapsed,
                                 });
                                 stable_count = 0;
                             }
