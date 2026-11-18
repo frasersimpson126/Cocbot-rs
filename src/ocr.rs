@@ -167,7 +167,7 @@ mod tests {
     #[test]
     fn parses_resource_amounts_with_separators() {
         assert_eq!(OcrEngine::parse_amount("1,234 567"), Some(1_234_567));
-        assert_eq!(OcrEngine::parse_amount("O / l"), Some(1));
+        assert_eq!(OcrEngine::parse_amount("O / l"), None);
         assert_eq!(OcrEngine::parse_amount(""), None);
     }
 
