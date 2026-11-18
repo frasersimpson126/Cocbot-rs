@@ -79,6 +79,10 @@ impl AutomationEngine {
         self.raid.confirm_opponent_skipped()
     }
 
+    pub fn retry_find_now(&mut self) -> Result<(), RaidError> {
+        self.raid.retry_find_now()
+    }
+
     pub fn pause(&mut self) {
         self.raid.pause();
         self.pipeline.reset();
