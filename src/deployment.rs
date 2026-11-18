@@ -25,11 +25,12 @@ pub enum DeploymentPattern {
     SpreadDrops,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct DeploymentPlan {
     pub strategy: ArmyStrategy,
     pub troop_slot_index: usize,
     pub troop_name: String,
+    pub troop_bounds: crate::vision::TemplateMatch,
     pub pattern: DeploymentPattern,
     /// For PerimeterDrag these are ordered drag waypoints. For the other patterns
     /// each point is an individual troop drop.
@@ -109,6 +110,7 @@ impl DeploymentPlanner {
             strategy,
             troop_slot_index: found.0,
             troop_name: found.1.name.clone(),
+            troop_bounds: found.1.bounds,
             pattern,
             points,
         })
