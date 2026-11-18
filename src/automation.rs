@@ -102,3 +102,41 @@ impl AutomationEngine {
         self.raid.stop()
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{
+        battle::BattleState,
+        config::{LootPriority, Village},
+        deployment::DeploymentPlanner,
+        ocr::OcrEngine,
+        raid::RaidCoordinator,
+        strategy::ArmyStrategy,
+        target::{TargetEvaluator, TargetPolicy},
+        vision::SearchRegion,
+    };
+
+    #[test]
+    fn orchestration_waits_when_the_screen_cannot_be_recognised() {
+        let pipeline = BattlePipeline::new(
+            "missing-template-directory",
+            OcrEngine::default(),
+            SearchRegion { x: 0, y: 0, width: 10, height: 10 },
+            Vec::new(),
+        );
+        let raid = RaidCoordinator::new(
+            Village::Home,
+            ArmyStrategy::SneakyGoblin,
+            TargetEvaluator::new(TargetPolicy::default(), LootPriority::Balanced),
+            DeploymentPlanner::default(),
+        ).unwrap();
+        let mut engine = AutomationEngine::new(pipeline, raid);
+        assert_eq!(engine.start(BattleState::HomeVillage), Ok(RaidCommand::OpenAttackMenu));
+        let frame = DynamicImage::new_rgba8(1280, 720);
+        let result = engine.process_frame(&frame, Viewport { width: 1280, height: 720 }).unwrap();
+        assert_eq!(result.perception.stable_state, BattleState::Unknown);
+        assert_eq!(result.command, RaidCommand::WaitForStableFrame);
+    }
+}
