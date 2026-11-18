@@ -5,6 +5,8 @@ pub mod platform;
 pub mod loot;
 pub mod ocr;
 pub mod strategy;
+pub mod vision;
+pub mod battle;
 
 use anyhow::Result;
 
