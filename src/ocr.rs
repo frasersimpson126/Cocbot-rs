@@ -36,9 +36,9 @@ impl OcrEngine {
     pub fn new(executable: impl Into<String>) -> Self {
         Self {
             executable: executable.into(),
-            hud_scale: 2,
+            hud_scale: 3,
             ui_scale: 1,
-            threshold: 145,
+            threshold: 190,
         }
     }
 
@@ -64,7 +64,7 @@ impl OcrEngine {
         match profile {
             OcrProfile::HudNumbers => {
                 command.arg("--psm").arg("6")
-                    .arg("-c").arg("tessedit_char_whitelist=0123456789")
+                    .arg("-c").arg("tessedit_char_whitelist=0123456789l")
                     .arg("-c").arg("classify_bln_numeric_mode=1")
                     .arg("-c").arg("load_system_dawg=0")
                     .arg("-c").arg("load_freq_dawg=0")
@@ -140,7 +140,7 @@ impl OcrEngine {
     /// Parses digits only, tolerating thousands separators and common OCR whitespace.
     pub fn parse_amount(text: &str) -> Option<u64> {
         let digits: String = text.chars()
-            .filter(|ch| ch.is_ascii_digit())
+            .filter_map(|ch| match ch { 'l' | 'I' => Some('1'), c if c.is_ascii_digit() => Some(c), _ => None })
             .collect();
         if digits.is_empty() { None } else { digits.parse().ok() }
     }
@@ -167,7 +167,7 @@ mod tests {
     #[test]
     fn parses_resource_amounts_with_separators() {
         assert_eq!(OcrEngine::parse_amount("1,234 567"), Some(1_234_567));
-        assert_eq!(OcrEngine::parse_amount("O / l"), None);
+        assert_eq!(OcrEngine::parse_amount("O / l"), Some(1));
         assert_eq!(OcrEngine::parse_amount(""), None);
     }
 
