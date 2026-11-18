@@ -161,7 +161,7 @@ impl TemplateMatcher {
                 }
                 let covariance = cross_sum - image_sum * template_sum / count;
                 let correlation = covariance / (image_variance * template_variance).sqrt();
-                let confidence = ((correlation + 1.0) * 0.5).clamp(0.0, 1.0) as f32;
+                let confidence = correlation.clamp(0.0, 1.0) as f32;
                 if confidence > best_confidence {
                     best_confidence = confidence;
                     best_xy = Some((x, y));
