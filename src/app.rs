@@ -1,9 +1,12 @@
 use crate::{
     config::{AppConfig, LootPriority, Village},
-    loot::LootTracker,
+    loot::{LootTracker, LootDelta},
+    backend::{BackendEvent, FarmingBackend},
+    ocr::OcrEngine,
     strategy::ArmyStrategy,
 };
 use eframe::egui;
+use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Page {
@@ -18,6 +21,11 @@ pub struct CocbotApp {
     page: Page,
     logs: Vec<String>,
     loot: LootTracker,
+    backend: Option<FarmingBackend>,
+    backend_status: String,
+    backend_loot: Option<(LootDelta, LootDelta)>,
+    event_tx: Sender<BackendEvent>,
+    event_rx: Receiver<BackendEvent>,
 }
 
 impl CocbotApp {
@@ -25,11 +33,17 @@ impl CocbotApp {
         let mut style = (*cc.egui_ctx.style()).clone();
         style.visuals = egui::Visuals::dark();
         cc.egui_ctx.set_style(style);
+        let (event_tx, event_rx) = mpsc::channel();
         Self {
             config,
             page: Page::Overview,
             logs: vec!["Cocbot-rs initialised. Game automation backend is not connected yet.".into()],
             loot: LootTracker::new(),
+            backend: None,
+            backend_status: "Not connected".into(),
+            backend_loot: None,
+            event_tx,
+            event_rx,
         }
     }
 
@@ -54,12 +68,37 @@ impl CocbotApp {
 
 impl eframe::App for CocbotApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        loop {
+            match self.event_rx.try_recv() {
+                Ok(event) => match event {
+                    BackendEvent::Connected { width, height } => {
+                        self.backend_status = format!("Connected — {width}×{height}");
+                        self.logs.push(self.backend_status.clone());
+                    }
+                    BackendEvent::LootUpdated { total, per_hour } => {
+                        self.backend_loot = Some((total, per_hour));
+                    }
+                    BackendEvent::Status(message) => self.logs.push(message),
+                    BackendEvent::Error(message) => {
+                        self.backend_status = format!("Error: {message}");
+                        self.logs.push(self.backend_status.clone());
+                    }
+                    BackendEvent::Stopped => {
+                        self.backend_status = "Monitoring stopped".into();
+                        self.logs.push("Game monitoring stopped.".into());
+                        self.backend.take();
+                    }
+                },
+                Err(TryRecvError::Empty) => break,
+                Err(TryRecvError::Disconnected) => break,
+            }
+        }
         egui::TopBottomPanel::top("header").show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.heading("Cocbot-rs");
                 ui.label(egui::RichText::new("FARMING AUTOMATION").small().weak());
                 ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    ui.label(egui::RichText::new("BACKEND NOT CONNECTED").color(egui::Color32::YELLOW));
+                    ui.label(egui::RichText::new(self.backend_status.to_uppercase()).color(if self.backend.is_some() { egui::Color32::LIGHT_GREEN } else { egui::Color32::YELLOW }));
                 });
             });
         });
@@ -81,10 +120,11 @@ impl eframe::App for CocbotApp {
                 ui.label("Live village recognition will appear here once game capture is implemented.");
                 ui.separator();
                 let summary = self.loot.summary();
+                let (total, per_hour) = self.backend_loot.unwrap_or((summary.total, summary.per_hour));
                 ui.label("Session loot");
-                Self::resource_row(ui, "Gold", summary.total.gold, summary.per_hour.gold);
-                Self::resource_row(ui, "Elixir", summary.total.elixir, summary.per_hour.elixir);
-                Self::resource_row(ui, "Dark elixir", summary.total.dark_elixir, summary.per_hour.dark_elixir);
+                Self::resource_row(ui, "Gold", total.gold, per_hour.gold);
+                Self::resource_row(ui, "Elixir", total.elixir, per_hour.elixir);
+                Self::resource_row(ui, "Dark elixir", total.dark_elixir, per_hour.dark_elixir);
                 ui.add_space(12.0);
                 ui.label(format!("Elapsed tracking time: {:.0} min", summary.elapsed.as_secs_f64() / 60.0));
                 ui.label("Automation target: Clash of Clans in Google Play Games for Windows.");
@@ -140,8 +180,34 @@ impl eframe::App for CocbotApp {
                 ui.label(format!("Selected strategy is intended for: {}", self.config.strategy.village_label()));
                 ui.label("Farming is designed to continue until manually stopped; there is no run timer.");
                 ui.add_space(8.0);
-                ui.add_enabled(false, egui::Button::new("Start farming — game backend not implemented"));
-                ui.label("Start is disabled until window capture, recognition, and safe input are implemented.");
+                ui.horizontal(|ui| {
+                    if self.backend.is_none() {
+                        if ui.button("Connect game & monitor loot").clicked() {
+                            let executable = if self.config.tesseract_path.trim().is_empty() {
+                                "tesseract".to_owned()
+                            } else {
+                                self.config.tesseract_path.trim().to_owned()
+                            };
+                            match FarmingBackend::start(OcrEngine::new(executable), self.event_tx.clone()) {
+                                Ok(backend) => {
+                                    self.backend = Some(backend);
+                                    self.backend_status = "Connecting…".into();
+                                    self.logs.push("Starting game capture and HUD monitoring.".into());
+                                }
+                                Err(error) => {
+                                    self.backend_status = format!("Error: {error}");
+                                    self.logs.push(self.backend_status.clone());
+                                }
+                            }
+                        }
+                    } else if ui.button("Stop monitoring").clicked() {
+                        if let Some(mut backend) = self.backend.take() {
+                            backend.stop();
+                        }
+                    }
+                });
+                ui.label("Loot monitoring uses live game capture and Tesseract OCR. Automated troop deployment is not connected yet.");
+                ui.add_enabled(false, egui::Button::new("Start farming — attack engine pending"));
                 if ui.button("Save farming settings").clicked() {
                     match self.config.save() {
                         Ok(()) => self.logs.push("Farming settings saved.".into()),
