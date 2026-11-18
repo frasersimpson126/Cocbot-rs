@@ -163,8 +163,21 @@ impl RaidCoordinator {
         }
         let plan = self.planner.plan(state, self.strategy, viewport, slots)
             .map_err(RaidError::Deployment)?;
-        self.phase = RaidPhase::InBattle;
         Ok(RaidCommand::Deploy(plan))
+    }
+
+    /// Call only after the input executor confirms that the deployment gesture began.
+    pub fn confirm_deployment_started(&mut self, state: BattleState) -> Result<(), RaidError> {
+        let expected = if self.village == Village::BuilderBase {
+            BattleState::BuilderBattle
+        } else {
+            BattleState::HomeBattle
+        };
+        if self.phase != RaidPhase::AwaitingDeployment || state != expected {
+            return Err(RaidError::UnexpectedState);
+        }
+        self.phase = RaidPhase::InBattle;
+        Ok(())
     }
 
     pub fn pause(&mut self) {
@@ -281,6 +294,8 @@ mod tests {
             ),
             Ok(RaidCommand::Deploy(_))
         ));
+        assert_eq!(raid.phase(), RaidPhase::AwaitingDeployment);
+        raid.confirm_deployment_started(BattleState::HomeBattle).unwrap();
         assert_eq!(raid.phase(), RaidPhase::InBattle);
         assert_eq!(raid.observe_state(BattleState::BattleWon), RaidCommand::ReturnToVillage);
         assert_eq!(raid.observe_state(BattleState::HomeVillage), RaidCommand::FindOpponent);
