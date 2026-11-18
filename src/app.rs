@@ -1,6 +1,6 @@
 use crate::{
     config::{AppConfig, LootPriority, Village},
-    loot::{LootDelta, LootTracker},
+    loot::LootTracker,
     strategy::ArmyStrategy,
 };
 use eframe::egui;
