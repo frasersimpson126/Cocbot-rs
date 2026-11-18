@@ -1,0 +1,24 @@
+mod app;
+mod config;
+
+use anyhow::Result;
+
+fn main() -> Result<()> {
+    tracing_subscriber::fmt()
+        .with_env_filter(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "info".into()))
+        .init();
+
+    let config = config::AppConfig::load()?;
+    let options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default()
+            .with_inner_size([1180.0, 760.0])
+            .with_min_inner_size([900.0, 620.0])
+            .with_title("Cocbot-rs"),
+        ..Default::default()
+    };
+    eframe::run_native(
+        "Cocbot-rs",
+        options,
+        Box::new(move |cc| Ok(Box::new(app::CocbotApp::new(cc, config)))),
+    ).map_err(|e| anyhow::anyhow!("GUI failed: {e}"))
+}
