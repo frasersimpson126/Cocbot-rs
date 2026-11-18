@@ -2,7 +2,7 @@
 
 A Rust desktop rewrite of [BasePilot](https://github.com/efebolukbasi/BasePilot), scoped to Clash of Clans farming and attack automation on Windows 10/11 with Google Play Games for PC.
 
-> **Status: backend in progress.** The application now has Windows desktop-window capture, mouse-input primitives, a Tesseract OCR engine, and continuous resource-HUD monitoring. Automated troop recognition, attack deployment, battle-state handling, and end-to-end farming are not complete. The Start farming action remains disabled until those pieces are implemented and tested.
+> **Status: backend in progress.** The project now includes window capture, mouse-input primitives, Tesseract HUD OCR, resource tracking, template matching, battle-state recognition, loot target scoring, a raid workflow coordinator, a guarded mouse deployment executor, an integrated perception pipeline, and a per-frame automation coordinator. Template assets are not yet bundled and the pipeline is not connected to the farming UI; live automation remains disabled. Start farming remains disabled until these pieces are implemented and validated.
 
 ## Included scope
 
@@ -20,14 +20,22 @@ There will be no dry-run/simulation mode, clan-related features, ranked attacks,
 
 ```text
 src/
-├── app.rs       egui desktop interface and backend status
-├── backend.rs   continuous game capture and resource monitoring worker
-├── config.rs    typed TOML farming preferences
-├── loot.rs      loot deltas, plausibility checks, and hourly rates
-├── ocr.rs       Tesseract 5 profiles and HUD text parsing
-├── platform.rs  desktop window capture and mouse input
-├── strategy.rs  supported army strategy definitions and deployment plans
-└── main.rs      application entry point
+├── app.rs         egui desktop interface and backend status
+├── backend.rs     continuous game capture and resource monitoring worker
+├── config.rs      typed TOML farming preferences
+├── loot.rs        loot deltas, plausibility checks, and hourly rates
+├── ocr.rs         Tesseract 5 profiles and HUD text parsing
+├── platform.rs    desktop window capture and mouse input
+├── strategy.rs    supported army strategy definitions and deployment plans
+├── vision.rs      resolution-scaled template matching
+├── battle.rs      battle-state and deployment-bar recognition
+├── target.rs      confidence-gated loot target scoring
+├── deployment.rs  battle-state and troop-gated deployment plan generation
+├── raid.rs        continuous raid state machine and target decisions
+├── executor.rs    validated troop selection, navigation and return input
+├── pipeline.rs    state, opponent-loot and troop-bar perception pipeline
+├── automation.rs  per-frame raid orchestration and action acknowledgements
+└── main.rs        application entry point
 ```
 
 ## OCR performance
@@ -39,8 +47,9 @@ The resource HUD is cropped before OCR instead of passing the full game frame to
 - Numeric whitelist (`0123456789l`)
 - Numeric mode enabled and dictionaries disabled
 - One OpenMP worker thread to reduce thread startup overhead
+- TSV output to extract per-word confidence in the same OCR invocation
 
-The OCR process receives the cropped PNG through stdin, so no temporary image files are created. Set the Tesseract executable path in Settings if it is not available on PATH. These settings are starting values based on BasePilot's HUD pipeline; they still need validation against screenshots from different game resolutions and UI scaling.
+The OCR process receives the cropped PNG through stdin, so no temporary image files are created. Word-level confidence is reduced to the weakest recognised word before a loot candidate can be accepted. Set the Tesseract executable path in Settings if it is not available on PATH. These settings are starting values based on BasePilot's HUD pipeline; they still need validation against screenshots from different game resolutions and UI scaling.
 
 ## Build
 
@@ -57,11 +66,12 @@ Tesseract 5 must also be installed for live resource OCR. The Windows desktop ca
 
 ## Remaining backend work
 
-1. Add and validate the upstream screen templates for both supported aspect ratios.
-2. Implement troop-bar and battle-state recognition.
-3. Port Home Village and Builder Base attack state machines and deployment geometry.
-4. Connect resource snapshots to verified before/after raid boundaries.
-5. Add recovery handling and end-to-end tests before enabling Start farming.
+1. Add the required upstream screen templates under `assets/templates/` and validate them at 16:9 and 16:10.
+2. Calibrate recognition thresholds against real game screenshots; the current matcher is a foundation, not a validated detector.
+3. Add and calibrate the screen and troop templates; current detectors are only as reliable as these assets.
+4. Connect the automation coordinator and executors to the live capture worker with cancellation and fresh-frame checks.
+5. Complete hero, siege machine and spell recognition and strategy-specific secondary deployment actions.
+6. Validate every navigation/deployment/return action against real screenshots and recovery paths before enabling Start farming.
 
 ## Terms and attribution
 

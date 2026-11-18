@@ -5,6 +5,14 @@ pub mod platform;
 pub mod loot;
 pub mod ocr;
 pub mod strategy;
+pub mod vision;
+pub mod battle;
+pub mod target;
+pub mod deployment;
+pub mod raid;
+pub mod executor;
+pub mod pipeline;
+pub mod automation;
 
 use anyhow::Result;
 
