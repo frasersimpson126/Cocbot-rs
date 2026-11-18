@@ -149,16 +149,16 @@ fn diamond_points(viewport: Viewport, count: usize) -> Vec<ScreenPoint> {
             let t = index as f32 / count as f32;
             let (x, y) = if t < 0.25 {
                 let p = t * 4.0;
-                (0.50 + 0.36 * p, 0.50 - 0.28 * p)
+                (0.86 - 0.36 * p, 0.50 - 0.28 * p)
             } else if t < 0.50 {
                 let p = (t - 0.25) * 4.0;
-                (0.86 - 0.36 * p, 0.22 + 0.56 * p)
+                (0.50 - 0.36 * p, 0.22 + 0.28 * p)
             } else if t < 0.75 {
                 let p = (t - 0.50) * 4.0;
-                (0.50 - 0.36 * p, 0.78 - 0.56 * p)
+                (0.14 + 0.36 * p, 0.50 + 0.28 * p)
             } else {
                 let p = (t - 0.75) * 4.0;
-                (0.14 + 0.36 * p, 0.22 + 0.28 * p)
+                (0.50 + 0.36 * p, 0.78 - 0.28 * p)
             };
             point(viewport, x, y)
         })
