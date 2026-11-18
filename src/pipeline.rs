@@ -48,7 +48,13 @@ impl BattlePipeline {
         }
     }
 
-    /// Disables opponent-loot OCR until the crop has been calibrated against real screenshots.\n    pub fn without_opponent_loot_ocr(mut self) -> Self {\n        self.opponent_loot_region = None;\n        self\n    }\n\n    pub fn with_stable_samples(mut self, samples: u8) -> Self {
+    /// Disables opponent-loot OCR until the crop has been calibrated against real screenshots.
+    pub fn without_opponent_loot_ocr(mut self) -> Self {
+        self.opponent_loot_region = None;
+        self
+    }
+
+    pub fn with_stable_samples(mut self, samples: u8) -> Self {
         self.stabilizer = StateStabilizer::new(samples);
         self
     }
@@ -58,7 +64,10 @@ impl BattlePipeline {
         let stable_state = self.stabilizer.observe(detection.state);
 
         let opponent_loot = if stable_state == BattleState::OpponentFound {
-            TargetCandidate::from_frame(frame, &self.ocr, self.opponent_loot_region)?
+            match self.opponent_loot_region {
+                Some(region) => TargetCandidate::from_frame(frame, &self.ocr, region)?,
+                None => None,
+            }
         } else {
             None
         };
