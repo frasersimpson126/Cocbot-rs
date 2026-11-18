@@ -2,7 +2,7 @@
 
 A Rust desktop rewrite of [BasePilot](https://github.com/efebolukbasi/BasePilot), scoped to Clash of Clans farming and attack automation on Windows 10/11 with Google Play Games for PC.
 
-> **Status: backend in progress.** The application now has Windows desktop-window capture, mouse-input primitives, a Tesseract OCR engine, and continuous resource-HUD monitoring. Template-matching and battle-recognition foundations have been added, but the template assets are not yet bundled and the recognition pipeline is not connected to farming. The Start farming action remains disabled until those pieces are implemented and tested.
+> **Status: backend in progress.** The project now includes window capture, mouse-input primitives, Tesseract HUD OCR, resource tracking, template matching, battle-state recognition, loot target scoring, and a guarded deployment-plan generator. Template assets are not yet bundled, the recognition pipeline is not connected to farming, and no attack clicks are issued. Start farming remains disabled until these pieces are implemented and validated.
 
 ## Included scope
 
@@ -20,16 +20,18 @@ There will be no dry-run/simulation mode, clan-related features, ranked attacks,
 
 ```text
 src/
-├── app.rs       egui desktop interface and backend status
-├── backend.rs   continuous game capture and resource monitoring worker
-├── config.rs    typed TOML farming preferences
-├── loot.rs      loot deltas, plausibility checks, and hourly rates
-├── ocr.rs       Tesseract 5 profiles and HUD text parsing
-├── platform.rs  desktop window capture and mouse input
-├── strategy.rs  supported army strategy definitions and deployment plans
-├── vision.rs    resolution-scaled template matching
-├── battle.rs    battle-state and deployment-bar recognition
-└── main.rs      application entry point
+├── app.rs         egui desktop interface and backend status
+├── backend.rs     continuous game capture and resource monitoring worker
+├── config.rs      typed TOML farming preferences
+├── loot.rs        loot deltas, plausibility checks, and hourly rates
+├── ocr.rs         Tesseract 5 profiles and HUD text parsing
+├── platform.rs    desktop window capture and mouse input
+├── strategy.rs    supported army strategy definitions and deployment plans
+├── vision.rs      resolution-scaled template matching
+├── battle.rs      battle-state and deployment-bar recognition
+├── target.rs      confidence-gated loot target scoring
+├── deployment.rs  battle-state and troop-gated deployment plan generation
+└── main.rs        application entry point
 ```
 
 ## OCR performance
@@ -62,8 +64,8 @@ Tesseract 5 must also be installed for live resource OCR. The Windows desktop ca
 1. Add the required upstream screen templates under `assets/templates/` and validate them at 16:9 and 16:10.
 2. Calibrate recognition thresholds against real game screenshots; the current matcher is a foundation, not a validated detector.
 3. Complete Home Village and Builder Base state recognition and troop/hero inventory detection.
-4. Implement target evaluation, deployment sequencing, battle completion detection, and return-to-farming transitions.
-5. Connect resource snapshots to verified raid boundaries and add recovery/end-to-end tests before enabling Start farming.
+4. Connect target scoring and deployment plans to a safe, cancellable battle controller; actual deployment remains unimplemented.
+5. Implement battle completion detection, return-to-farming transitions, verified raid boundaries, and recovery/end-to-end tests before enabling Start farming.
 
 ## Terms and attribution
 
