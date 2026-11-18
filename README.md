@@ -2,7 +2,7 @@
 
 A Rust desktop rewrite of [BasePilot](https://github.com/efebolukbasi/BasePilot), scoped to Clash of Clans farming and attack automation on Windows 10/11 with Google Play Games for PC.
 
-> **Status: early development.** The current build contains the desktop shell, persistent farming preferences, attack-strategy models, and loot-accounting logic with unit tests. It is not yet a working game bot: Windows game capture, screen recognition, troop-bar detection, input injection, and the raid state machine remain to be implemented and validated.
+> **Status: backend in progress.** The application now has Windows desktop-window capture, mouse-input primitives, a Tesseract OCR engine, and continuous resource-HUD monitoring. Automated troop recognition, attack deployment, battle-state handling, and end-to-end farming are not complete. The Start farming action remains disabled until those pieces are implemented and tested.
 
 ## Included scope
 
@@ -20,16 +20,31 @@ There will be no dry-run/simulation mode, clan-related features, ranked attacks,
 
 ```text
 src/
-├── app.rs       egui desktop interface
+├── app.rs       egui desktop interface and backend status
+├── backend.rs   continuous game capture and resource monitoring worker
 ├── config.rs    typed TOML farming preferences
 ├── loot.rs      loot deltas, plausibility checks, and hourly rates
+├── ocr.rs       Tesseract 5 profiles and HUD text parsing
+├── platform.rs  desktop window capture and mouse input
 ├── strategy.rs  supported army strategy definitions and deployment plans
 └── main.rs      application entry point
 ```
 
+## OCR performance
+
+The resource HUD is cropped before OCR instead of passing the full game frame to Tesseract. The crop follows the upstream BasePilot reference regions (600×400 at 2560×1600 for 16:10, 550×350 at 2560×1440 for 16:9), then applies a 3× upscale and a strict bright-glyph threshold. Tesseract is invoked with:
+
+- LSTM engine only (`--oem 1`)
+- Single text block (`--psm 6`)
+- Numeric whitelist (`0123456789l`)
+- Numeric mode enabled and dictionaries disabled
+- One OpenMP worker thread to reduce thread startup overhead
+
+The OCR process receives the cropped PNG through stdin, so no temporary image files are created. Set the Tesseract executable path in Settings if it is not available on PATH. These settings are starting values based on BasePilot's HUD pipeline; they still need validation against screenshots from different game resolutions and UI scaling.
+
 ## Build
 
-Rust 1.85+:
+Rust 1.93.1+:
 
 ```powershell
 cargo run
@@ -38,14 +53,15 @@ cargo fmt --check
 cargo clippy --all-targets --all-features -- -D warnings
 ```
 
-## Porting plan
+Tesseract 5 must also be installed for live resource OCR. The Windows desktop capture and input backend targets Google Play Games for PC.
 
-1. Implement Windows game-window discovery and reliable frame capture.
-2. Port the original screen templates and state recognition needed for farming.
-3. Implement OCR for resource HUD readings and validate it against screenshot fixtures.
-4. Port Home Village and Builder Base raid state machines and the selected army strategies.
-5. Connect loot tracking to corroborated before/after raid snapshots.
-6. Add Windows input handling, cancellation, recovery, and end-to-end tests.
+## Remaining backend work
+
+1. Add and validate the upstream screen templates for both supported aspect ratios.
+2. Implement troop-bar and battle-state recognition.
+3. Port Home Village and Builder Base attack state machines and deployment geometry.
+4. Connect resource snapshots to verified before/after raid boundaries.
+5. Add recovery handling and end-to-end tests before enabling Start farming.
 
 ## Terms and attribution
 
