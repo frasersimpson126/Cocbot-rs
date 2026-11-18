@@ -2,7 +2,7 @@
 
 A Rust desktop rewrite of [BasePilot](https://github.com/efebolukbasi/BasePilot), scoped to Clash of Clans farming and attack automation on Windows 10/11 with Google Play Games for PC.
 
-> **Status: backend in progress.** The project now includes window capture, mouse-input primitives, Tesseract HUD OCR, resource tracking, template matching, battle-state recognition, loot target scoring, and a guarded deployment-plan generator. Template assets are not yet bundled, the recognition pipeline is not connected to farming, and no attack clicks are issued. Start farming remains disabled until these pieces are implemented and validated.
+> **Status: backend in progress.** The project now includes window capture, mouse-input primitives, Tesseract HUD OCR, resource tracking, template matching, battle-state recognition, loot target scoring, a raid workflow coordinator, and a guarded mouse deployment executor. Template assets are not yet bundled, the recognition pipeline is not connected to farming, and no attack clicks are issued. Start farming remains disabled until these pieces are implemented and validated.
 
 ## Included scope
 
@@ -31,6 +31,8 @@ src/
 ├── battle.rs      battle-state and deployment-bar recognition
 ├── target.rs      confidence-gated loot target scoring
 ├── deployment.rs  battle-state and troop-gated deployment plan generation
+├── raid.rs        continuous raid state machine and target decisions
+├── executor.rs    validated troop selection and deployment input
 └── main.rs        application entry point
 ```
 
@@ -64,8 +66,9 @@ Tesseract 5 must also be installed for live resource OCR. The Windows desktop ca
 1. Add the required upstream screen templates under `assets/templates/` and validate them at 16:9 and 16:10.
 2. Calibrate recognition thresholds against real game screenshots; the current matcher is a foundation, not a validated detector.
 3. Complete Home Village and Builder Base state recognition and troop/hero inventory detection.
-4. Connect target scoring and deployment plans to a safe, cancellable battle controller; actual deployment remains unimplemented.
-5. Implement battle completion detection, return-to-farming transitions, verified raid boundaries, and recovery/end-to-end tests before enabling Start farming.
+4. Connect the raid coordinator and deployment executor to the live capture worker with cancellation and fresh-frame checks.
+5. Complete troop/hero/spell recognition and strategy-specific secondary deployment actions.
+6. Validate battle completion, retreat/return controls, and recovery paths against real screenshots before enabling Start farming.
 
 ## Terms and attribution
 
