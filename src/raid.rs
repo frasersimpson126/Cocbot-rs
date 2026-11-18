@@ -15,6 +15,7 @@ pub enum RaidPhase {
     EvaluatingOpponent,
     SkippingOpponent,
     AwaitingDeployment,
+    DeploymentPrepared,
     InBattle,
     AwaitingReturn,
     Paused,
@@ -113,6 +114,7 @@ impl RaidCoordinator {
             (RaidPhase::StartingMatchmaking, _) => RaidCommand::WaitForStableFrame,
             (RaidPhase::Searching, BattleState::Matchmaking) => RaidCommand::WaitForStableFrame,
             (RaidPhase::SkippingOpponent, _) => RaidCommand::WaitForStableFrame,
+            (RaidPhase::DeploymentPrepared, _) => RaidCommand::WaitForStableFrame,
             (RaidPhase::Searching, BattleState::OpponentFound) => {
                 self.phase = RaidPhase::EvaluatingOpponent;
                 RaidCommand::WaitForStableFrame
@@ -198,6 +200,7 @@ impl RaidCoordinator {
         }
         let plan = self.planner.plan(state, self.strategy, viewport, slots)
             .map_err(RaidError::Deployment)?;
+        self.phase = RaidPhase::DeploymentPrepared;
         Ok(RaidCommand::Deploy(plan))
     }
 
@@ -208,10 +211,19 @@ impl RaidCoordinator {
         } else {
             BattleState::HomeBattle
         };
-        if self.phase != RaidPhase::AwaitingDeployment || state != expected {
+        if self.phase != RaidPhase::DeploymentPrepared || state != expected {
             return Err(RaidError::UnexpectedState);
         }
         self.phase = RaidPhase::InBattle;
+        Ok(())
+    }
+
+    /// Return to plan generation if the deployment executor failed before sending input.
+    pub fn retry_deployment(&mut self) -> Result<(), RaidError> {
+        if self.phase != RaidPhase::DeploymentPrepared {
+            return Err(RaidError::UnexpectedState);
+        }
+        self.phase = RaidPhase::AwaitingDeployment;
         Ok(())
     }
 
@@ -345,7 +357,7 @@ mod tests {
             ),
             Ok(RaidCommand::Deploy(_))
         ));
-        assert_eq!(raid.phase(), RaidPhase::AwaitingDeployment);
+        assert_eq!(raid.phase(), RaidPhase::DeploymentPrepared);
         raid.confirm_deployment_started(BattleState::HomeBattle).unwrap();
         assert_eq!(raid.phase(), RaidPhase::InBattle);
         assert_eq!(raid.observe_state(BattleState::BattleWon), RaidCommand::ReturnToVillage);
