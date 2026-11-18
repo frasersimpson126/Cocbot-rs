@@ -1,5 +1,5 @@
 use anyhow::{Context, Result, bail};
-use image::{DynamicImage, GrayImage, ImageFormat, Luma, imageops::{self, FilterType}};
+use image::{DynamicImage, GrayImage, ImageFormat, imageops::{self, FilterType}};
 use std::{
     io::Write,
     process::{Command, Stdio},
@@ -182,7 +182,7 @@ mod tests {
     #[test]
     fn empty_input_is_rejected_before_starting_tesseract() {
         let engine = OcrEngine::default();
-        let empty = DynamicImage::ImageLuma8(GrayImage::from_pixel(0, 0, Luma([0])));
+        let empty = DynamicImage::ImageLuma8(GrayImage::new(0, 0));
         assert!(engine.recognise(&empty, OcrProfile::HudNumbers).is_err());
     }
 }
