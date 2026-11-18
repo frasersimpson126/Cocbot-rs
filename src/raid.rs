@@ -11,6 +11,7 @@ use crate::{
 pub enum RaidPhase {
     Idle,
     Searching,
+    StartingMatchmaking,
     EvaluatingOpponent,
     SkippingOpponent,
     AwaitingDeployment,
@@ -97,7 +98,19 @@ impl RaidCoordinator {
             return RaidCommand::WaitForStableFrame;
         }
         match (self.phase, state) {
-            (RaidPhase::Searching, BattleState::AttackMenu) => RaidCommand::FindOpponent,
+            (RaidPhase::Searching, BattleState::AttackMenu) => {
+                self.phase = RaidPhase::StartingMatchmaking;
+                RaidCommand::FindOpponent
+            }
+            (RaidPhase::StartingMatchmaking, BattleState::Matchmaking) => {
+                self.phase = RaidPhase::Searching;
+                RaidCommand::WaitForStableFrame
+            }
+            (RaidPhase::StartingMatchmaking, BattleState::OpponentFound) => {
+                self.phase = RaidPhase::EvaluatingOpponent;
+                RaidCommand::WaitForStableFrame
+            }
+            (RaidPhase::StartingMatchmaking, _) => RaidCommand::WaitForStableFrame,
             (RaidPhase::Searching, BattleState::Matchmaking) => RaidCommand::WaitForStableFrame,
             (RaidPhase::SkippingOpponent, _) => RaidCommand::WaitForStableFrame,
             (RaidPhase::Searching, BattleState::OpponentFound) => {
@@ -144,6 +157,15 @@ impl RaidCoordinator {
             self.phase = RaidPhase::SkippingOpponent;
             RaidCommand::SkipOpponent
         }
+    }
+
+    /// Reset a pending search transition if the Find Now click failed.
+    pub fn retry_find_now(&mut self) -> Result<(), RaidError> {
+        if self.phase != RaidPhase::StartingMatchmaking {
+            return Err(RaidError::UnexpectedState);
+        }
+        self.phase = RaidPhase::Searching;
+        Ok(())
     }
 
     /// Call after the next-opponent button click has been confirmed by the input layer.
