@@ -41,6 +41,10 @@ impl TemplateMatcher {
         self
     }
 
+    pub fn has_template(&self, name: &str) -> bool {
+        self.template_path(name).is_file()
+    }
+
     pub fn find(
         &self,
         frame: &DynamicImage,
