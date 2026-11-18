@@ -140,7 +140,7 @@ impl TemplateMatcher {
 
     fn template_path(&self, name: &str) -> PathBuf {
         // Prevent template names from escaping the configured template directory.
-        let file = Path::new(name).file_name().unwrap_or_default();
+        let file = Path::new(name).file_name().unwrap_or_else(|| std::ffi::OsStr::new(""));
         self.directory.join(file)
     }
 }
