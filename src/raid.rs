@@ -101,9 +101,9 @@ impl RaidCoordinator {
                 RaidCommand::WaitForStableFrame
             }
             (RaidPhase::AwaitingDeployment, BattleState::HomeBattle)
-                if self.village == Village::Home => RaidCommand::WaitForStableFrame
+                if self.village == Village::Home => RaidCommand::WaitForStableFrame,
             (RaidPhase::AwaitingDeployment, BattleState::BuilderBattle)
-                if self.village == Village::BuilderBase => RaidCommand::WaitForStableFrame
+                if self.village == Village::BuilderBase => RaidCommand::WaitForStableFrame,
             (RaidPhase::InBattle, BattleState::BattleWon | BattleState::BattleLost) => {
                 self.phase = RaidPhase::AwaitingReturn;
                 RaidCommand::ReturnToVillage
