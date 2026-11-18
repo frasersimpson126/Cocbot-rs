@@ -59,11 +59,19 @@ impl FarmingBackend {
                 // No opponent ROI or troop templates are configured yet. This connects
                 // live frames to state recognition without treating guessed coordinates
                 // or absent assets as evidence for an attack.
+                let troop_template = match config.strategy {
+                    crate::strategy::ArmyStrategy::SneakyGoblin => "sneaky_goblin.png",
+                    crate::strategy::ArmyStrategy::Valkyrie => "valkyrie.png",
+                    crate::strategy::ArmyStrategy::SuperMinion => "super_minion.png",
+                    crate::strategy::ArmyStrategy::ElectroDragon => "electro_dragon.png",
+                    crate::strategy::ArmyStrategy::SuperDragon => "super_dragon.png",
+                    crate::strategy::ArmyStrategy::BuilderBaseBabyDragon => "baby_dragon.png",
+                };
                 let pipeline = BattlePipeline::new(
                     template_directory(width, height),
                     ocr.clone(),
                     SearchRegion { x: 0, y: 0, width: 1, height: 1 },
-                    Vec::new(),
+                    vec![troop_template.to_owned()],
                 )
                 .without_opponent_loot_ocr()
                 .with_stable_samples(2);
