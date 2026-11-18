@@ -2,7 +2,7 @@
 
 A Rust desktop rewrite of [BasePilot](https://github.com/efebolukbasi/BasePilot), scoped to Clash of Clans farming and attack automation on Windows 10/11 with Google Play Games for PC.
 
-> **Status: backend in progress.** The project now includes window capture, mouse-input primitives, Tesseract HUD OCR, resource tracking, template matching, battle-state recognition, loot target scoring, a raid workflow coordinator, a guarded mouse deployment executor, an integrated perception pipeline, and a per-frame automation coordinator. Template assets are not yet bundled and the live capture worker now feeds battle-state recognition and the Farming UI displays the stabilised state. Opponent-loot OCR and troop recognition remain unconfigured; live automation remains disabled until templates and screen coordinates are validated.
+> **Status: backend in progress.** The project now includes window capture, mouse-input primitives, Tesseract HUD OCR, resource tracking, template matching, battle-state recognition, loot target scoring, a raid workflow coordinator, a guarded mouse deployment executor, an integrated perception pipeline, and a per-frame automation coordinator. Template assets are not yet bundled and the live capture worker now feeds battle-state recognition and the raid coordinator, with stabilised state and pending commands displayed in the Farming UI. Commands are not sent to the mouse executor. Opponent-loot OCR and troop recognition remain unconfigured; live automation remains disabled until templates and screen coordinates are validated.
 
 ## Included scope
 
@@ -69,7 +69,7 @@ Tesseract 5 must also be installed for live resource OCR. The Windows desktop ca
 1. Add the required upstream screen templates under `assets/templates/` and validate them at 16:9 and 16:10. The current repository contains only the template README.
 2. Calibrate recognition thresholds against real game screenshots; the current matcher is a foundation, not a validated detector.
 3. Add and calibrate the screen and troop templates; current detectors are only as reliable as these assets.
-4. Connect the automation coordinator and executors to the live capture worker with cancellation and fresh-frame checks. The current worker reports live battle state but intentionally does not execute commands.
+4. Connect the automation coordinator and executors to the live capture worker with cancellation and fresh-frame checks. The current worker reports live battle state and raid-coordinator decisions but intentionally does not execute commands.
 5. Complete hero, siege machine and spell recognition and strategy-specific secondary deployment actions.
 6. Validate every navigation/deployment/return action against real screenshots and recovery paths before enabling Start farming.
 
