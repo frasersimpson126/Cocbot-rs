@@ -25,6 +25,7 @@ pub struct CocbotApp {
     backend: Option<FarmingBackend>,
     backend_status: String,
     battle_status: String,
+    raid_status: String,
     backend_loot: Option<(LootDelta, LootDelta)>,
     backend_elapsed: Option<std::time::Duration>,
     event_tx: Sender<BackendEvent>,
@@ -45,6 +46,7 @@ impl CocbotApp {
             backend: None,
             backend_status: "Not connected".into(),
             battle_status: "Not available".into(),
+            raid_status: "Idle".into(),
             backend_loot: None,
             backend_elapsed: None,
             event_tx,
@@ -81,6 +83,10 @@ impl eframe::App for CocbotApp {
                     BackendEvent::Connected { width, height } => {
                         self.backend_status = format!("Connected — {width}×{height}");
                         self.logs.push(self.backend_status.clone());
+                    }
+                    BackendEvent::RaidUpdated { phase, command } => {
+                        self.raid_status = format!("{phase:?} — pending: {command}");
+                        self.logs.push(format!("Raid coordinator: {}", self.raid_status));
                     }
                     BackendEvent::BattleUpdated { state, confidence } => {
                         self.battle_status = format!("{} ({:.0}% confidence)", battle_state_label(state), confidence * 100.0);
@@ -192,6 +198,7 @@ impl eframe::App for CocbotApp {
                 ui.add_space(12.0);
                 ui.label(format!("Selected strategy is intended for: {}", self.config.strategy.village_label()));
                 ui.label(format!("Recognised battle screen: {}", self.battle_status));
+                ui.label(format!("Raid coordinator: {}", self.raid_status));
                 ui.label("Farming is designed to continue until manually stopped; there is no run timer.");
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
@@ -202,7 +209,7 @@ impl eframe::App for CocbotApp {
                             } else {
                                 self.config.tesseract_path.trim().to_owned()
                             };
-                            match FarmingBackend::start(OcrEngine::new(executable), self.event_tx.clone()) {
+                            match FarmingBackend::start(OcrEngine::new(executable), self.config.clone(), self.event_tx.clone()) {
                                 Ok(backend) => {
                                     self.backend = Some(backend);
                                     self.backend_status = "Connecting…".into();
@@ -220,7 +227,7 @@ impl eframe::App for CocbotApp {
                         backend.stop();
                     }
                 });
-                ui.label("Live capture feeds both HUD OCR and battle-state recognition. Screen templates, opponent loot crops and troop icons still require calibration; automated input remains disabled.");
+                ui.label("Live capture feeds HUD OCR, battle-state recognition and the raid coordinator. Planned actions are displayed but not sent. Screen templates, opponent loot crops and troop icons still require calibration; automated input remains disabled.");
                 ui.add_enabled(false, egui::Button::new("Start farming — attack engine pending"));
                 if ui.button("Save farming settings").clicked() {
                     match self.config.save() {
