@@ -7,6 +7,7 @@ pub mod ocr;
 pub mod strategy;
 pub mod vision;
 pub mod battle;
+pub mod target;
 
 use anyhow::Result;
 
