@@ -75,6 +75,10 @@ impl AutomationEngine {
         self.raid.confirm_deployment_started(state)
     }
 
+    pub fn retry_deployment(&mut self) -> Result<(), RaidError> {
+        self.raid.retry_deployment()
+    }
+
     pub fn confirm_opponent_skipped(&mut self) -> Result<(), RaidError> {
         self.raid.confirm_opponent_skipped()
     }
