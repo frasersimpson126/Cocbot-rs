@@ -89,6 +89,29 @@ impl DeploymentExecutor {
         if state != expected_state {
             bail!("Deployment refused: current battle state does not match the selected village");
         }
+        let expected_troop = match plan.strategy {
+            crate::strategy::ArmyStrategy::SneakyGoblin => "sneaky_goblin",
+            crate::strategy::ArmyStrategy::Valkyrie => "valkyrie",
+            crate::strategy::ArmyStrategy::SuperMinion => "super_minion",
+            crate::strategy::ArmyStrategy::ElectroDragon => "electro_dragon",
+            crate::strategy::ArmyStrategy::SuperDragon => "super_dragon",
+            crate::strategy::ArmyStrategy::BuilderBaseBabyDragon => "baby_dragon",
+        };
+        if !plan.troop_name.to_ascii_lowercase().contains(expected_troop) {
+            bail!("Deployment refused: recognised troop does not match the selected army strategy");
+        }
+        let pattern_matches = matches!(
+            (plan.strategy, plan.pattern),
+            (crate::strategy::ArmyStrategy::ElectroDragon, DeploymentPattern::IndividualDrops { .. })
+                | (crate::strategy::ArmyStrategy::BuilderBaseBabyDragon, DeploymentPattern::SpreadDrops)
+                | (crate::strategy::ArmyStrategy::SneakyGoblin, DeploymentPattern::PerimeterDrag)
+                | (crate::strategy::ArmyStrategy::Valkyrie, DeploymentPattern::PerimeterDrag)
+                | (crate::strategy::ArmyStrategy::SuperMinion, DeploymentPattern::PerimeterDrag)
+                | (crate::strategy::ArmyStrategy::SuperDragon, DeploymentPattern::PerimeterDrag)
+        );
+        if !pattern_matches {
+            bail!("Deployment refused: deployment pattern is incompatible with the selected strategy");
+        }
         if width < 640 || height < 480 {
             bail!("Deployment refused: game viewport is too small");
         }
@@ -104,13 +127,20 @@ impl DeploymentExecutor {
         if right > width || bottom > height {
             bail!("Deployment refused: troop slot lies outside the game viewport");
         }
+        let margin_x = width / 20;
+        let margin_y = height / 10;
         if plan.points.is_empty()
-            || plan.points.iter().any(|p| p.x >= width || p.y >= height)
+            || plan.points.iter().any(|p| {
+                p.x < margin_x || p.x >= width.saturating_sub(margin_x)
+                    || p.y < margin_y || p.y >= height.saturating_sub(margin_y)
+            })
         {
-            bail!("Deployment refused: deployment path is empty or outside the game viewport");
+            bail!("Deployment refused: deployment path is empty or outside the safe play area");
         }
-        if matches!(plan.pattern, DeploymentPattern::PerimeterDrag) && plan.points.len() < 2 {
-            bail!("Deployment refused: perimeter drag requires at least two waypoints");
+        if matches!(plan.pattern, DeploymentPattern::PerimeterDrag)
+            && (plan.points.len() < 2 || plan.points.first() != plan.points.last())
+        {
+            bail!("Deployment refused: perimeter drag requires a closed path with at least two waypoints");
         }
         Ok(())
     }
