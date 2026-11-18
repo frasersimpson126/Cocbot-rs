@@ -12,6 +12,7 @@ pub enum RaidPhase {
     Idle,
     Searching,
     EvaluatingOpponent,
+    SkippingOpponent,
     AwaitingDeployment,
     InBattle,
     AwaitingReturn,
@@ -98,6 +99,7 @@ impl RaidCoordinator {
         match (self.phase, state) {
             (RaidPhase::Searching, BattleState::AttackMenu) => RaidCommand::FindOpponent,
             (RaidPhase::Searching, BattleState::Matchmaking) => RaidCommand::WaitForStableFrame,
+            (RaidPhase::SkippingOpponent, _) => RaidCommand::WaitForStableFrame,
             (RaidPhase::Searching, BattleState::OpponentFound) => {
                 self.phase = RaidPhase::EvaluatingOpponent;
                 RaidCommand::WaitForStableFrame
@@ -139,9 +141,18 @@ impl RaidCoordinator {
             // The backend must call prepare_deployment once troop slots are recognised.
             RaidCommand::WaitForStableFrame
         } else {
-            self.phase = RaidPhase::Searching;
+            self.phase = RaidPhase::SkippingOpponent;
             RaidCommand::SkipOpponent
         }
+    }
+
+    /// Call after the next-opponent button click has been confirmed by the input layer.
+    pub fn confirm_opponent_skipped(&mut self) -> Result<(), RaidError> {
+        if self.phase != RaidPhase::SkippingOpponent {
+            return Err(RaidError::UnexpectedState);
+        }
+        self.phase = RaidPhase::Searching;
+        Ok(())
     }
 
     pub fn prepare_deployment(
@@ -254,6 +265,9 @@ mod tests {
             confidence: 0.99,
         };
         assert_eq!(raid.evaluate_opponent(bad), RaidCommand::SkipOpponent);
+        assert_eq!(raid.phase(), RaidPhase::SkippingOpponent);
+        assert_eq!(raid.observe_state(BattleState::OpponentFound), RaidCommand::WaitForStableFrame);
+        raid.confirm_opponent_skipped().unwrap();
         assert_eq!(raid.phase(), RaidPhase::Searching);
     }
 
