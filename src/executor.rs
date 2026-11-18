@@ -319,7 +319,7 @@ mod tests {
                 x: 10, y: 10, width: 30, height: 30, confidence: 0.99,
             },
             pattern: DeploymentPattern::PerimeterDrag,
-            points: vec![ScreenPoint { x: 100, y: 100 }, ScreenPoint { x: 200, y: 100 }],
+            points: vec![ScreenPoint { x: 100, y: 100 }, ScreenPoint { x: 200, y: 100 }, ScreenPoint { x: 100, y: 100 }],
         }
     }
 
