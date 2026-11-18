@@ -50,12 +50,6 @@ impl CocbotApp {
         });
     }
 
-    fn format_loot(ui: &mut egui::Ui, loot: LootDelta) {
-        ui.label(format!(
-            "Gold: {}    Elixir: {}    Dark elixir: {}",
-            loot.gold, loot.elixir, loot.dark_elixir
-        ));
-    }
 }
 
 impl eframe::App for CocbotApp {
