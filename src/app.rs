@@ -204,10 +204,10 @@ impl eframe::App for CocbotApp {
                                 }
                             }
                         }
-                    } else if ui.button("Stop monitoring").clicked() {
-                        if let Some(mut backend) = self.backend.take() {
-                            backend.stop();
-                        }
+                    } else if ui.button("Stop monitoring").clicked()
+                        && let Some(mut backend) = self.backend.take()
+                    {
+                        backend.stop();
                     }
                 });
                 ui.label("Loot monitoring uses live game capture and Tesseract OCR. Automated troop deployment is not connected yet.");
