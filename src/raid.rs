@@ -282,9 +282,17 @@ impl RaidCoordinator {
                 self.phase = RaidPhase::AwaitingNextOpponent;
                 RaidCommand::WaitForStableFrame
             }
-            (RaidPhase::StartingMatchmaking, BattleState::AttackMenu | BattleState::Matchmaking) => {
+            (RaidPhase::StartingMatchmaking, BattleState::AttackMenu) => {
                 self.phase = RaidPhase::StartingMatchmaking;
+                RaidCommand::FindOpponent
+            }
+            (RaidPhase::StartingMatchmaking, BattleState::Matchmaking) => {
+                self.phase = RaidPhase::Searching;
                 RaidCommand::WaitForStableFrame
+            }
+            (RaidPhase::InBattle, BattleState::BattleWon | BattleState::BattleLost) => {
+                self.phase = RaidPhase::AwaitingReturn;
+                RaidCommand::ReturnToVillage
             }
             (_, current) if current == home_state => {
                 self.phase = RaidPhase::Searching;
