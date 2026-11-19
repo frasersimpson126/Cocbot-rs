@@ -229,7 +229,7 @@ impl eframe::App for CocbotApp {
                             egui::Frame::group(ui.style()).show(ui, |ui| {
                                 ui.set_min_width(175.0);
                                 ui.label(egui::RichText::new(label).small().weak());
-                                ui.heading(egui::RichText::new(format!("{value:,}")).size(25.0).color(accent));
+                                ui.heading(egui::RichText::new(format_amount(value)).size(25.0).color(accent));
                             });
                         }
                     });
@@ -473,6 +473,18 @@ impl eframe::App for CocbotApp {
             }
         });
     }
+}
+
+fn format_amount(value: u64) -> String {
+    let digits = value.to_string();
+    let mut formatted = String::with_capacity(digits.len() + digits.len() / 3);
+    for (index, character) in digits.chars().enumerate() {
+        if index > 0 && (digits.len() - index) % 3 == 0 {
+            formatted.push(',');
+        }
+        formatted.push(character);
+    }
+    formatted
 }
 
 fn battle_state_label(state: BattleState) -> &'static str {
