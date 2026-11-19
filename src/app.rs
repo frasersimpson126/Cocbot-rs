@@ -26,6 +26,7 @@ pub struct CocbotApp {
     backend_status: String,
     battle_status: String,
     raid_status: String,
+    target_status: String,
     backend_loot: Option<(LootDelta, LootDelta)>,
     backend_elapsed: Option<std::time::Duration>,
     event_tx: Sender<BackendEvent>,
@@ -47,6 +48,7 @@ impl CocbotApp {
             backend_status: "Not connected".into(),
             battle_status: "Not available".into(),
             raid_status: "Idle".into(),
+            target_status: "No opponent target evaluated".into(),
             backend_loot: None,
             backend_elapsed: None,
             event_tx,
@@ -88,6 +90,7 @@ impl eframe::App for CocbotApp {
                         self.raid_status = format!("{phase:?} — pending: {command}");
                         self.logs.push(format!("Raid coordinator: {}", self.raid_status));
                     }
+                    BackendEvent::TargetUpdated(status) => self.target_status = status,
                     BackendEvent::BattleUpdated { state, confidence } => {
                         self.battle_status = format!("{} ({:.0}% confidence)", battle_state_label(state), confidence * 100.0);
                         self.logs.push(format!("Battle screen: {}", battle_state_label(state)));
@@ -225,6 +228,7 @@ impl eframe::App for CocbotApp {
                 ui.label(format!("Selected strategy is intended for: {}", self.config.strategy.village_label()));
                 ui.label(format!("Recognised battle screen: {}", self.battle_status));
                 ui.label(format!("Raid coordinator: {}", self.raid_status));
+                ui.label(format!("Target evaluation: {}", self.target_status));
                 ui.label("Farming is designed to continue until manually stopped; there is no run timer.");
                 ui.add_space(8.0);
                 ui.horizontal(|ui| {
