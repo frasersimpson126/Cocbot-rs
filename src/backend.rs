@@ -160,6 +160,7 @@ impl FarmingBackend {
                 let mut stable_count = 0_u8;
                 let mut last_ocr_error: Option<String> = None;
                 let mut last_capture_error: Option<String> = None;
+                let mut capture_error_frames = 0_u8;
                 let mut resize_warning_active = false;
                 let mut last_battle_state: Option<BattleState> = None;
                 let mut unknown_state_frames = 0_u8;
@@ -189,13 +190,21 @@ impl FarmingBackend {
                     let frame = match window.capture() {
                         Ok(frame) => {
                             last_capture_error = None;
+                            capture_error_frames = 0;
                             frame
                         }
                         Err(error) => {
                             let message = error.to_string();
+                            capture_error_frames = capture_error_frames.saturating_add(1);
                             if last_capture_error.as_deref() != Some(message.as_str()) {
                                 let _ = events.send(BackendEvent::Status(format!("Screen capture failed: {message}")));
                                 last_capture_error = Some(message);
+                            }
+                            if capture_error_frames >= 3
+                                && !matches!(automation.phase(), RaidPhase::Idle | RaidPhase::Paused)
+                            {
+                                automation.pause();
+                                let _ = events.send(BackendEvent::Status("Farming paused after repeated capture failures; restore the game window and explicitly resume.".into()));
                             }
                             sleep_interruptibly(&worker_stop, Duration::from_millis(250));
                             continue;
