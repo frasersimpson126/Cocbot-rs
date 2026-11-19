@@ -93,6 +93,11 @@ impl FarmingBackend {
                     crate::strategy::ArmyStrategy::BuilderBaseBabyDragon => "baby_dragon.png",
                 };
                 let templates = template_directory(width, height);
+                let troop_bar_roi = config.troop_bar_roi
+                    .filter(|region| region.is_valid_for(width, height))
+                    .map(|region| SearchRegion {
+                        x: region.x, y: region.y, width: region.width, height: region.height,
+                    });
                 let diagnostics = TemplatePackDiagnostics::inspect(&templates, config.strategy);
                 for message in diagnostics.messages() {
                     let _ = events.send(BackendEvent::Status(message));
@@ -142,7 +147,7 @@ impl FarmingBackend {
                 } else {
                     pipeline.without_opponent_loot_ocr()
                 };
-                let pipeline = pipeline.with_stable_samples(2);
+                let pipeline = pipeline.with_troop_bar_region(troop_bar_roi).with_stable_samples(2);
 
                 let policy = TargetPolicy {
                     minimum_gold: config.minimum_gold,
