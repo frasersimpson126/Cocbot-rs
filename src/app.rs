@@ -195,6 +195,20 @@ impl eframe::App for CocbotApp {
                         });
                     ui.end_row();
                 });
+                ui.add_space(10.0);
+                ui.collapsing("Target requirements", |ui| {
+                    ui.label("A target must meet all three resource minimums and the weighted score/confidence thresholds.");
+                    ui.add(egui::Slider::new(&mut self.config.minimum_gold, 100_000..=2_000_000)
+                        .step_by(50_000.0).text("Minimum gold"));
+                    ui.add(egui::Slider::new(&mut self.config.minimum_elixir, 100_000..=2_000_000)
+                        .step_by(50_000.0).text("Minimum elixir"));
+                    ui.add(egui::Slider::new(&mut self.config.minimum_dark_elixir, 0..=20_000)
+                        .step_by(500.0).text("Minimum dark elixir"));
+                    ui.add(egui::Slider::new(&mut self.config.minimum_score_percent, 0..=100)
+                        .text("Minimum loot score (%)"));
+                    ui.add(egui::Slider::new(&mut self.config.minimum_confidence_percent, 50..=100)
+                        .text("Minimum OCR confidence (%)"));
+                });
                 ui.add_space(12.0);
                 ui.label(format!("Selected strategy is intended for: {}", self.config.strategy.village_label()));
                 ui.label(format!("Recognised battle screen: {}", self.battle_status));
