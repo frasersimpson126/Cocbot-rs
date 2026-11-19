@@ -199,9 +199,9 @@ impl FarmingBackend {
                                 None
                             };
                             if target_status != last_target_status {
-                                if let Some(status) = &target_status {
-                                    let _ = events.send(BackendEvent::TargetUpdated(status.clone()));
-                                }
+                                let status = target_status.clone()
+                                    .unwrap_or_else(|| "No opponent target evaluated".to_owned());
+                                let _ = events.send(BackendEvent::TargetUpdated(status));
                                 last_target_status = target_status;
                             }
                         }
