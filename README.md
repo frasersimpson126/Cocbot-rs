@@ -2,7 +2,7 @@
 
 A Rust desktop rewrite of [BasePilot](https://github.com/efebolukbasi/BasePilot), scoped to Clash of Clans farming and attack automation on Windows 10/11 with Google Play Games for PC.
 
-> **Status: backend in progress.** The project now includes window capture, mouse-input primitives, Tesseract HUD OCR, resource tracking, template matching, battle-state recognition (including battle ending, return transitions and connection errors), loot target scoring, a raid workflow coordinator, a guarded mouse deployment executor, an integrated perception pipeline, and a per-frame automation coordinator. Template assets are not yet bundled and the live capture worker now feeds battle-state recognition and the raid coordinator, with stabilised state and pending commands displayed in the Farming UI. Farming controls now send start/pause/resume/stop commands to the worker. Input remains locked until required screen/troop templates and a user-calibrated opponent-loot crop pass startup checks. Each navigation/deployment/return action is revalidated against the current stable frame; a deployment error stops the session to avoid duplicate troop drops.
+> **Status: backend in progress.** The project now includes window capture, mouse-input primitives, Tesseract HUD OCR, resource tracking, template matching, battle-state recognition (including battle ending, return transitions and connection errors), loot target scoring, a raid workflow coordinator, guarded navigation/deployment/return executors, an integrated perception pipeline, and per-frame automation. Template assets are not bundled. The live worker exposes start/pause/resume/stop controls and can execute the raid workflow, but Start remains locked until required templates and the opponent-loot crop are present and the user confirms both have been calibrated against live game screens. Each action is revalidated against the current screen; a deployment error stops the session to avoid duplicate troop drops.
 
 ## Included scope
 
@@ -21,7 +21,7 @@ There will be no dry-run/simulation mode, clan-related features, ranked attacks,
 ```text
 src/
 ├── app.rs         egui desktop interface and backend status
-├── backend.rs     shared-frame capture, resource OCR and battle perception worker
+├── backend.rs     shared-frame capture, OCR, raid controls and guarded input dispatch
 ├── config.rs      typed TOML farming preferences
 ├── loot.rs        loot deltas, plausibility checks, and hourly rates
 ├── ocr.rs         Tesseract 5 profiles and HUD text parsing
