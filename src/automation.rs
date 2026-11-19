@@ -41,6 +41,15 @@ impl AutomationEngine {
         viewport: Viewport,
     ) -> Result<AutomationFrame> {
         let perception = self.pipeline.process_frame(frame)?;
+        // A stable connection-error overlay pauses the coordinator. Recovery never
+        // resumes farming automatically; an explicit resume is required.
+        if perception.stable_state == BattleState::ConnectionError {
+            self.raid.pause();
+            return Ok(AutomationFrame {
+                perception,
+                command: RaidCommand::WaitForStableFrame,
+            });
+        }
         let command = match self.raid.phase() {
             // Monitoring and recognition must not implicitly start a farming session.
             // The UI must explicitly start a raid before commands can be planned.

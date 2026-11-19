@@ -11,8 +11,11 @@ pub enum BattleState {
     OpponentFound,
     HomeBattle,
     BuilderBattle,
+    BattleEnding,
     BattleWon,
     BattleLost,
+    ReturningHome,
+    ConnectionError,
     Unknown,
 }
 
@@ -52,8 +55,12 @@ impl BattleStateDetector {
         // Result overlays take precedence over controls visible behind them.
         // Builder Base has separate anchors because its battle HUD differs.
         let candidates = [
+            // A connection error must override controls that may remain visible behind it.
+            (&["connectionerror.png", "connection_error.png"][..], BattleState::ConnectionError, full),
             (&["bstar.png", "bbstar.png"][..], BattleState::BattleWon, bottom),
             (&["defeat.png", "bbdefeat.png"][..], BattleState::BattleLost, bottom),
+            (&["returninghome.png", "bbreturninghome.png"][..], BattleState::ReturningHome, full),
+            (&["battleending.png", "bbbattleending.png"][..], BattleState::BattleEnding, bottom),
             (&["opponentfound.png"][..], BattleState::OpponentFound, full),
             (&["bbendbattle.png"][..], BattleState::BuilderBattle, bottom),
             (&["endbattle.png"][..], BattleState::HomeBattle, bottom),

@@ -268,8 +268,11 @@ fn battle_state_label(state: BattleState) -> &'static str {
         BattleState::OpponentFound => "Opponent found",
         BattleState::HomeBattle => "Home Village battle",
         BattleState::BuilderBattle => "Builder Base battle",
+        BattleState::BattleEnding => "Battle ending",
         BattleState::BattleWon => "Battle won",
         BattleState::BattleLost => "Battle lost",
+        BattleState::ReturningHome => "Returning home",
+        BattleState::ConnectionError => "Connection error — automation must pause",
         BattleState::Unknown => "Unknown — templates required",
     }
 }
