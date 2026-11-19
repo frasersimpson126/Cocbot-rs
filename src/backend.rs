@@ -48,6 +48,7 @@ pub struct FarmingBackend {
     stop: Arc<AtomicBool>,
     worker: Option<JoinHandle<()>>,
     commands: Sender<BackendCommand>,
+}
 
 impl FarmingBackend {
     pub fn start(ocr: OcrEngine, config: AppConfig, events: Sender<BackendEvent>) -> Result<Self> {
