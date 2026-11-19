@@ -17,9 +17,10 @@ use anyhow::Result;
 use image::{imageops, DynamicImage};
 use std::{
     path::PathBuf,
+    fs,
     sync::{atomic::{AtomicBool, Ordering}, mpsc::{self, Sender}, Arc},
     thread::{self, JoinHandle},
-    time::Duration,
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 #[derive(Debug, Clone)]
@@ -41,6 +42,7 @@ pub enum BackendCommand {
     PauseFarming,
     ResumeFarming,
     StopFarming,
+    SaveCalibrationScreenshot,
 }
 
 /// Owns capture, perception, user controls and guarded farming input execution.
@@ -167,6 +169,7 @@ impl FarmingBackend {
                 let mut last_raid_status: Option<(RaidPhase, String)> = None;
                 let mut last_target_status: Option<String> = None;
                 let mut pending_control: Option<BackendCommand> = None;
+                let mut pending_screenshot = false;
 
                 while !worker_stop.load(Ordering::Relaxed) {
                     // Pause/stop must still be honoured if capture temporarily fails.
@@ -182,6 +185,7 @@ impl FarmingBackend {
                                 pending_control = None;
                                 let _ = events.send(BackendEvent::Status("Farming session stopped.".into()));
                             }
+                            BackendCommand::SaveCalibrationScreenshot => pending_screenshot = true,
                             start_or_resume @ (BackendCommand::StartFarming | BackendCommand::ResumeFarming) => {
                                 pending_control = Some(start_or_resume);
                             }
@@ -386,6 +390,15 @@ impl FarmingBackend {
                                         command = automation.stop();
                                         let _ = events.send(BackendEvent::Status("Farming session stopped.".into()));
                                     }
+                                    BackendCommand::SaveCalibrationScreenshot => pending_screenshot = true,
+                                }
+                            }
+
+                            if pending_screenshot {
+                                pending_screenshot = false;
+                                match save_calibration_screenshot(&frame) {
+                                    Ok(path) => { let _ = events.send(BackendEvent::Status(format!("Calibration screenshot saved: {}", path.display()))); }
+                                    Err(error) => { let _ = events.send(BackendEvent::Error(format!("Could not save calibration screenshot: {error}"))); }
                                 }
                             }
 
@@ -474,6 +487,10 @@ impl FarmingBackend {
         self.commands.send(BackendCommand::StopFarming).map_err(|_| anyhow::anyhow!("Farming worker is not available"))
     }
 
+    pub fn save_calibration_screenshot(&self) -> Result<()> {
+        self.commands.send(BackendCommand::SaveCalibrationScreenshot).map_err(|_| anyhow::anyhow!("Farming worker is not available"))
+    }
+
     pub fn stop(&mut self) {
         self.stop.store(true, Ordering::Relaxed);
         if let Some(worker) = self.worker.take() {
@@ -488,6 +505,15 @@ impl Drop for FarmingBackend {
     }
 }
 
+
+fn save_calibration_screenshot(frame: &DynamicImage) -> Result<PathBuf> {
+    let directory = AppConfig::calibration_dir()?;
+    fs::create_dir_all(&directory)?;
+    let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis();
+    let path = directory.join(format!("game-capture-{timestamp}.png"));
+    frame.save(&path)?;
+    Ok(path)
+}
 
 fn execute_raid_command(
     input: &mut enigo::Enigo,
