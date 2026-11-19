@@ -67,6 +67,7 @@ recognition group in the Farming log. Required groups are:
 - Victory and defeat: `bstar.png` / `bbstar.png`, and `defeat.png` / `bbdefeat.png`
 - Return: `returnhome.png` or `bbreturnhome.png`
 - The next-opponent button (`next.png` or `bbnext.png`)
+- The opponent-screen Attack button (`attacknow.png`, `attack_now.png`, `attackbutton.png` or `bbattacknow.png`)
 - A connection-error overlay (`connectionerror.png` or `connection_error.png`)
 - The selected strategy's troop icon
 
