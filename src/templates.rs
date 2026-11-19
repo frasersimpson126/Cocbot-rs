@@ -193,3 +193,17 @@ fn validate_asset(directory: &Path, file: &str) -> TemplateAssetDiagnostic {
         Err(error) => TemplateAssetDiagnostic { file: file.to_owned(), valid: false, message: format!("image decode failed: {error}") },
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn farming_requires_next_opponent_and_connection_error_templates() {
+        let groups = required_groups(ArmyStrategy::SneakyGoblin);
+        for required_name in ["next opponent", "connection error"] {
+            assert!(groups.iter().any(|group| group.name == required_name && group.required));
+        }
+    }
+}
