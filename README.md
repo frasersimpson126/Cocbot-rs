@@ -28,6 +28,7 @@ src/
 ├── platform.rs    desktop window capture and mouse input
 ├── strategy.rs    supported army strategy definitions and deployment plans
 ├── vision.rs      resolution-scaled template matching
+├── templates.rs   required asset manifest and startup validation diagnostics
 ├── battle.rs      battle-state and deployment-bar recognition
 ├── target.rs      confidence-gated loot target scoring
 ├── deployment.rs  battle-state and troop-gated deployment plan generation
@@ -37,6 +38,33 @@ src/
 ├── automation.rs  per-frame raid orchestration and action acknowledgements
 └── main.rs        application entry point
 ```
+
+## Template packs and diagnostics
+
+At startup the backend inspects the selected strategy's aspect-ratio template directory
+and reports every required and optional recognition group in the Farming log. Required
+groups include village entry, Find Now, matchmaking, opponent-found, battle HUD,
+separate victory and defeat markers, return-home, and the selected army troop icon.
+A group is considered available only when at least one alternative decodes successfully.
+
+Every supplied image is decoded during validation. Empty files, corrupt images, files
+larger than 16 MiB, and images outside the supported 8×8 to 2048×2048 dimensions are
+reported as invalid. Missing or invalid assets never count as a match and do not silently
+lower recognition thresholds. Optional groups (next-opponent, hero ability, siege
+machine and spell icons) are reported separately.
+
+Install the assets in the directory matching the captured window aspect ratio:
+
+- `assets/templates/16_9/` for 16:9 game windows
+- `assets/templates/16_10/` for 16:10 game windows
+
+Use tightly cropped PNGs from your own screenshots. Crop a stable, distinctive control
+or icon, avoid surrounding changing text/counts, and capture at the same UI scale as the
+game. Do not use artwork copied from third-party repositories without permission.
+See [assets/templates/README.md](assets/templates/README.md) for the complete filename
+manifest and calibration guidance. Startup validation is a file-integrity check, not
+proof that a template matches live gameplay; calibrate thresholds on representative
+screenshots before any input execution is enabled.
 
 ## OCR performance
 
