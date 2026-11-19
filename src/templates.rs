@@ -171,6 +171,13 @@ fn validate_asset(directory: &Path, file: &str) -> TemplateAssetDiagnostic {
         }
         _ => {}
     }
+    let format = image::ImageReader::open(&path)
+        .ok()
+        .and_then(|reader| reader.with_guessed_format().ok())
+        .and_then(|reader| reader.format());
+    if format != Some(image::ImageFormat::Png) {
+        return TemplateAssetDiagnostic { file: file.to_owned(), valid: false, message: "file content is not a PNG image".into() };
+    }
     match image::open(&path) {
         Ok(decoded) => {
             let (width, height) = decoded.dimensions();
