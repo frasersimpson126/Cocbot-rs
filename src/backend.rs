@@ -500,7 +500,8 @@ fn execute_raid_command(
     match command {
         crate::raid::RaidCommand::OpenAttackMenu
         | crate::raid::RaidCommand::FindOpponent
-        | crate::raid::RaidCommand::SkipOpponent => {
+        | crate::raid::RaidCommand::SkipOpponent
+        | crate::raid::RaidCommand::AttackOpponent => {
             navigation.execute(&action_window, input, frame, village, state, command)?;
             if matches!(command, crate::raid::RaidCommand::SkipOpponent) {
                 automation.confirm_opponent_skipped()
