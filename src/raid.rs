@@ -103,12 +103,6 @@ impl RaidCoordinator {
             return RaidCommand::WaitForStableFrame;
         }
         match (self.phase, state) {
-            (RaidPhase::Searching, BattleState::HomeVillage) if self.village == Village::Home => {
-                RaidCommand::OpenAttackMenu
-            }
-            (RaidPhase::Searching, BattleState::BuilderBase) if self.village == Village::BuilderBase => {
-                RaidCommand::OpenAttackMenu
-            }
             (RaidPhase::Searching, BattleState::AttackMenu) => {
                 self.phase = RaidPhase::StartingMatchmaking;
                 RaidCommand::FindOpponent
