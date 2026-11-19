@@ -27,6 +27,7 @@ pub enum BackendEvent {
     LootUpdated { total: crate::loot::LootDelta, per_hour: crate::loot::LootDelta, elapsed: Duration },
     BattleUpdated { state: BattleState, confidence: f32 },
     RaidUpdated { phase: RaidPhase, command: String },
+    TargetUpdated(String),
     Status(String),
     Error(String),
     Stopped,
@@ -130,6 +131,7 @@ impl FarmingBackend {
                 let mut last_capture_error: Option<String> = None;
                 let mut last_battle_state: Option<BattleState> = None;
                 let mut last_raid_status: Option<(RaidPhase, String)> = None;
+                let mut last_target_status: Option<String> = None;
 
                 while !worker_stop.load(Ordering::Relaxed) {
                     let frame = match window.capture() {
@@ -174,6 +176,33 @@ impl FarmingBackend {
                                     command: status.1.clone(),
                                 });
                                 last_raid_status = Some(status);
+                            }
+
+                            let target_status = if state == BattleState::OpponentFound {
+                                if let Some(candidate) = analysis.perception.opponent_loot {
+                                    automation.last_evaluation().map(|evaluation| {
+                                        format!(
+                                            "Opponent loot: {} gold / {} elixir / {} dark elixir | OCR {:.0}% | score {}% | {}{}",
+                                            candidate.loot.gold,
+                                            candidate.loot.elixir,
+                                            candidate.loot.dark_elixir,
+                                            candidate.confidence * 100.0,
+                                            evaluation.score_percent,
+                                            if evaluation.accepted { "ACCEPTED" } else { "REJECTED" },
+                                            evaluation.rejection.map(|reason| format!(": {reason:?}")).unwrap_or_default()
+                                        )
+                                    })
+                                } else {
+                                    Some("Opponent loot OCR: waiting for a valid three-line read".to_owned())
+                                }
+                            } else {
+                                None
+                            };
+                            if target_status != last_target_status {
+                                if let Some(status) = &target_status {
+                                    let _ = events.send(BackendEvent::TargetUpdated(status.clone()));
+                                }
+                                last_target_status = target_status;
                             }
                         }
                         Err(error) => {
