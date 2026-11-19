@@ -163,8 +163,27 @@ impl FarmingBackend {
                 let mut last_battle_state: Option<BattleState> = None;
                 let mut last_raid_status: Option<(RaidPhase, String)> = None;
                 let mut last_target_status: Option<String> = None;
+                let mut pending_control: Option<BackendCommand> = None;
 
                 while !worker_stop.load(Ordering::Relaxed) {
+                    // Pause/stop must still be honoured if capture temporarily fails.
+                    while let Ok(control) = command_rx.try_recv() {
+                        match control {
+                            BackendCommand::PauseFarming => {
+                                automation.pause();
+                                pending_control = None;
+                                let _ = events.send(BackendEvent::Status("Farming paused.".into()));
+                            }
+                            BackendCommand::StopFarming => {
+                                automation.stop();
+                                pending_control = None;
+                                let _ = events.send(BackendEvent::Status("Farming session stopped.".into()));
+                            }
+                            start_or_resume @ (BackendCommand::StartFarming | BackendCommand::ResumeFarming) => {
+                                pending_control = Some(start_or_resume);
+                            }
+                        }
+                    }
                     let frame = match window.capture() {
                         Ok(frame) => {
                             last_capture_error = None;
@@ -236,6 +255,50 @@ impl FarmingBackend {
                             }
 
                             let mut command = analysis.command.clone();
+                            if let Some(control) = pending_control.take() {
+                                match control {
+                                    BackendCommand::StartFarming => {
+                                        if !can_start {
+                                            let _ = events.send(BackendEvent::Status(format!("Start refused: {readiness_reason}")));
+                                        } else if !matches!(state, BattleState::HomeVillage | BattleState::BuilderBase) {
+                                            let _ = events.send(BackendEvent::Status("Start refused: wait until the selected village home screen is stably recognised.".into()));
+                                        } else {
+                                            if input.is_none() {
+                                                match create_input() {
+                                                    Ok(created) => input = Some(created),
+                                                    Err(error) => { let _ = events.send(BackendEvent::Error(format!("Desktop input unavailable: {error}"))); }
+                                                }
+                                            }
+                                            if input.is_some() {
+                                                match automation.start(state) {
+                                                    Ok(start_command) => {
+                                                        command = start_command;
+                                                        let _ = events.send(BackendEvent::Status("Farming session started.".into()));
+                                                    }
+                                                    Err(error) => { let _ = events.send(BackendEvent::Status(format!("Could not start farming: {error:?}"))); }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    BackendCommand::ResumeFarming => {
+                                        if matches!(state, BattleState::Unknown | BattleState::ConnectionError) {
+                                            let _ = events.send(BackendEvent::Status("Resume refused: wait for a stable, recognised screen and resolve any connection error.".into()));
+                                        } else {
+                                            if input.is_none() {
+                                                match create_input() {
+                                                    Ok(created) => input = Some(created),
+                                                    Err(error) => { let _ = events.send(BackendEvent::Error(format!("Desktop input unavailable: {error}"))); }
+                                                }
+                                            }
+                                            if input.is_some() {
+                                                command = automation.resume(state);
+                                                let _ = events.send(BackendEvent::Status("Farming resume requested.".into()));
+                                            }
+                                        }
+                                    }
+                                    BackendCommand::PauseFarming | BackendCommand::StopFarming => {}
+                                }
+                            }
                             while let Ok(control) = command_rx.try_recv() {
                                 match control {
                                     BackendCommand::StartFarming => {
