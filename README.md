@@ -71,6 +71,8 @@ The Farming page exposes persisted target requirements: minimum gold, elixir and
 
 ## Opponent loot OCR calibration
 
+Use **Save calibration screenshot** in the connected Farming page to save the current game frame under the application's local data directory (`calibration/`). Crop the required screen-state, button and troop templates from those captures using an image editor, then place the PNGs in the matching aspect-ratio template folder. The screenshot stays on the local machine.
+
 Opponent loot OCR is disabled by default. The Start control also requires explicit confirmation that the crop has been compared against multiple real opponent screens, and that all required screen/troop templates have been checked against live game screens. In Farming, expand **Opponent loot OCR region** and set the left, top, width and height of a tight crop around the three resource counters on the opponent-search screen. Values are percentages of the full captured game frame, so the crop scales with window resolution. Width and height must be non-zero and the crop must remain inside the frame; otherwise the pipeline keeps opponent OCR disabled. Save settings and reconnect after changing the crop. Compare recognised values against several real opponent screens before relying on target decisions. This crop is independent of the top-right player HUD crop used for session loot tracking.
 
 ## OCR performance
