@@ -581,15 +581,13 @@ fn execute_raid_command(
 /// Resolve the aspect-specific template pack beside the executable first, then from
 /// the current working directory. This keeps packaged builds independent of launch cwd.
 fn contains_template_images(directory: &std::path::Path) -> bool {
-    fs::read_dir(directory)
-        .map(|entries| {
-            entries.flatten().any(|entry| {
-                entry.path().extension()
-                    .and_then(|extension| extension.to_str())
-                    .is_some_and(|extension| extension.eq_ignore_ascii_case("png"))
-            })
+    fs::read_dir(directory).is_ok_and(|entries| {
+        entries.flatten().any(|entry| {
+            entry.path().extension()
+                .and_then(|extension| extension.to_str())
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("png"))
         })
-        .unwrap_or(false)
+    })
 }
 
 fn template_directory(width: u32, height: u32) -> PathBuf {
