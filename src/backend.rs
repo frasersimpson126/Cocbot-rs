@@ -580,6 +580,18 @@ fn execute_raid_command(
 
 /// Resolve the aspect-specific template pack beside the executable first, then from
 /// the current working directory. This keeps packaged builds independent of launch cwd.
+fn contains_template_images(directory: &std::path::Path) -> bool {
+    fs::read_dir(directory)
+        .map(|entries| {
+            entries.filter_map(|entry| entry.ok()).any(|entry| {
+                entry.path().extension()
+                    .and_then(|extension| extension.to_str())
+                    .is_some_and(|extension| extension.eq_ignore_ascii_case("png"))
+            })
+        })
+        .unwrap_or(false)
+}
+
 fn template_directory(width: u32, height: u32) -> PathBuf {
     let aspect_directory = if width as f32 / height.max(1) as f32 > 1.70 {
         "16_9"
@@ -590,7 +602,7 @@ fn template_directory(width: u32, height: u32) -> PathBuf {
         && let Some(data_directory) = calibration_directory.parent()
     {
         let candidate = data_directory.join("assets").join("templates").join(aspect_directory);
-        if candidate.is_dir() {
+        if contains_template_images(&candidate) {
             return candidate;
         }
     }
@@ -598,7 +610,7 @@ fn template_directory(width: u32, height: u32) -> PathBuf {
         && let Some(directory) = executable.parent()
     {
         let candidate = directory.join("assets").join("templates").join(aspect_directory);
-        if candidate.is_dir() {
+        if contains_template_images(&candidate) {
             return candidate;
         }
     }
