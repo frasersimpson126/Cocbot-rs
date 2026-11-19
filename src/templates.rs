@@ -145,6 +145,7 @@ pub fn required_groups(strategy: ArmyStrategy) -> Vec<TemplateGroup> {
         },
         group("selected army troop", &[troop], true),
         group("next opponent", &["next.png", "bbnext.png"], true),
+        group("attack opponent", &["attacknow.png", "attack_now.png", "attackbutton.png", "bbattacknow.png"], true),
         group("connection error", &["connectionerror.png", "connection_error.png"], true),
         group("hero ability", &["king_ability.png", "queen_ability.png", "warden_ability.png", "champion_ability.png"], false),
         group("siege machine", &["siege_machine.png"], false),
