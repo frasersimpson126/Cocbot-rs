@@ -200,6 +200,20 @@ impl FarmingBackend {
                         }
                     };
 
+                    if frame.width() != width || frame.height() != height {
+                        let message = format!(
+                            "Game window resized from {width}x{height} to {}x{}; farming paused until monitoring is restarted and the ROI is recalibrated.",
+                            frame.width(), frame.height()
+                        );
+                        if last_capture_error.as_deref() != Some(message.as_str()) {
+                            let _ = events.send(BackendEvent::Status(message.clone()));
+                            last_capture_error = Some(message);
+                        }
+                        automation.pause();
+                        sleep_interruptibly(&worker_stop, Duration::from_millis(250));
+                        continue;
+                    }
+
                     match automation.process_frame(&frame, Viewport { width, height }) {
                         Ok(analysis) => {
                             let state = analysis.perception.stable_state;
