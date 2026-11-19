@@ -3,20 +3,21 @@ use crate::{
     battle::BattleState,
     config::AppConfig,
     deployment::{DeploymentPlanner, Viewport},
+    executor::{DeploymentExecutor, RaidNavigationExecutor, ReturnHomeExecutor},
     loot::{LootTracker, ResourceSnapshot},
     ocr::{OcrEngine, OcrProfile},
-    platform::GameWindow,
+    platform::{create_input, GameWindow},
     pipeline::BattlePipeline,
     raid::{RaidCoordinator, RaidPhase},
     target::{TargetEvaluator, TargetPolicy},
     templates::TemplatePackDiagnostics,
-    vision::SearchRegion,
+    vision::{SearchRegion, TemplateMatcher},
 };
 use anyhow::Result;
 use image::{imageops, DynamicImage};
 use std::{
     path::PathBuf,
-    sync::{atomic::{AtomicBool, Ordering}, mpsc::Sender, Arc},
+    sync::{atomic::{AtomicBool, Ordering}, mpsc::{self, Sender}, Arc},
     thread::{self, JoinHandle},
     time::Duration,
 };
@@ -28,22 +29,31 @@ pub enum BackendEvent {
     BattleUpdated { state: BattleState, confidence: f32 },
     RaidUpdated { phase: RaidPhase, command: String },
     TargetUpdated(String),
+    Ready { can_start: bool, reason: String },
     Status(String),
     Error(String),
     Stopped,
 }
 
-/// Owns the long-running capture and perception worker. Automated input is deliberately
-/// not invoked here: screen templates and loot coordinates must be calibrated first.
+#[derive(Debug, Clone, Copy)]
+pub enum BackendCommand {
+    StartFarming,
+    PauseFarming,
+    ResumeFarming,
+    StopFarming,
+}
+
+/// Owns capture, perception, user controls and guarded farming input execution.
 pub struct FarmingBackend {
     stop: Arc<AtomicBool>,
     worker: Option<JoinHandle<()>>,
-}
+    commands: Sender<BackendCommand>,
 
 impl FarmingBackend {
     pub fn start(ocr: OcrEngine, config: AppConfig, events: Sender<BackendEvent>) -> Result<Self> {
         let stop = Arc::new(AtomicBool::new(false));
         let worker_stop = Arc::clone(&stop);
+        let (commands, command_rx) = mpsc::channel();
         let worker = thread::Builder::new()
             .name("cocbot-backend".into())
             .spawn(move || {
@@ -83,11 +93,24 @@ impl FarmingBackend {
                 for message in diagnostics.messages() {
                     let _ = events.send(BackendEvent::Status(message));
                 }
+                let can_start = diagnostics.is_ready() && opponent_roi.is_some();
+                let readiness_reason = if !diagnostics.is_ready() {
+                    "Required screen or selected troop templates are missing/invalid.".to_owned()
+                } else if opponent_roi.is_none() {
+                    "Configure a valid opponent-loot OCR crop before starting.".to_owned()
+                } else {
+                    "Required templates and opponent-loot crop are configured; verify them against live gameplay.".to_owned()
+                };
+                let _ = events.send(BackendEvent::Ready { can_start, reason: readiness_reason.clone() });
                 if !diagnostics.is_ready() {
                     let _ = events.send(BackendEvent::Status(
-                        "Automation remains unsafe: required screen and troop templates are missing or invalid. Add calibrated assets before enabling input execution.".into()
+                        "Automation remains locked: required screen and troop templates are missing or invalid.".into()
                     ));
                 }
+                let navigation = RaidNavigationExecutor::new(TemplateMatcher::new(templates.clone()));
+                let return_home = ReturnHomeExecutor::new(TemplateMatcher::new(templates.clone()));
+                let deployment = DeploymentExecutor::default();
+                let mut input = None;
                 let pipeline = BattlePipeline::new(
                     templates,
                     ocr.clone(),
@@ -204,6 +227,82 @@ impl FarmingBackend {
                                 let _ = events.send(BackendEvent::TargetUpdated(status));
                                 last_target_status = target_status;
                             }
+
+                            let mut command = analysis.command.clone();
+                            while let Ok(control) = command_rx.try_recv() {
+                                match control {
+                                    BackendCommand::StartFarming => {
+                                        if !can_start {
+                                            let _ = events.send(BackendEvent::Status(format!("Start refused: {readiness_reason}")));
+                                        } else if !matches!(state, BattleState::HomeVillage | BattleState::BuilderBase) {
+                                            let _ = events.send(BackendEvent::Status("Start refused: wait until the selected village home screen is stably recognised.".into()));
+                                        } else {
+                                            if input.is_none() {
+                                                match create_input() {
+                                                    Ok(created) => input = Some(created),
+                                                    Err(error) => { let _ = events.send(BackendEvent::Error(format!("Desktop input unavailable: {error}"))); }
+                                                }
+                                            }
+                                            if input.is_some() {
+                                                match automation.start(state) {
+                                                    Ok(start_command) => {
+                                                        command = start_command;
+                                                        let _ = events.send(BackendEvent::Status("Farming session started.".into()));
+                                                    }
+                                                    Err(error) => { let _ = events.send(BackendEvent::Status(format!("Could not start farming: {error:?}"))); }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    BackendCommand::PauseFarming => {
+                                        automation.pause();
+                                        command = crate::raid::RaidCommand::WaitForStableFrame;
+                                        let _ = events.send(BackendEvent::Status("Farming paused.".into()));
+                                    }
+                                    BackendCommand::ResumeFarming => {
+                                        if matches!(state, BattleState::Unknown | BattleState::ConnectionError) {
+                                            let _ = events.send(BackendEvent::Status("Resume refused: wait for a stable, recognised screen and resolve any connection error.".into()));
+                                        } else {
+                                            if input.is_none() {
+                                                match create_input() {
+                                                    Ok(created) => input = Some(created),
+                                                    Err(error) => { let _ = events.send(BackendEvent::Error(format!("Desktop input unavailable: {error}"))); }
+                                                }
+                                            }
+                                            if input.is_some() {
+                                                command = automation.resume(state);
+                                                let _ = events.send(BackendEvent::Status("Farming resume requested.".into()));
+                                            }
+                                        }
+                                    }
+                                    BackendCommand::StopFarming => {
+                                        command = automation.stop();
+                                        let _ = events.send(BackendEvent::Status("Farming session stopped.".into()));
+                                    }
+                                }
+                            }
+
+                            if let Some(input_device) = input.as_mut()
+                                && automation.phase() != RaidPhase::Idle
+                                && !matches!(command,
+                                    crate::raid::RaidCommand::None
+                                    | crate::raid::RaidCommand::WaitForStableFrame
+                                    | crate::raid::RaidCommand::RaidFinished)
+                            {
+                                if let Err(error) = execute_raid_command(
+                                    &window, input_device, &frame, config.village, state, &command,
+                                    &navigation, &return_home, &deployment, &mut automation,
+                                ) {
+                                    let _ = events.send(BackendEvent::Error(format!("Action refused or failed: {error}")));
+                                    if matches!(command, crate::raid::RaidCommand::Deploy(_)) {
+                                        automation.stop();
+                                        let _ = events.send(BackendEvent::Status("Deployment failed after input may have started; farming stopped to prevent duplicate troop deployment.".into()));
+                                    } else {
+                                        automation.pause();
+                                        let _ = events.send(BackendEvent::Status("Farming paused after an input/navigation error. Inspect the game before resuming.".into()));
+                                    }
+                                }
+                            }
                         }
                         Err(error) => {
                             let _ = events.send(BackendEvent::Status(format!("Battle automation analysis skipped: {error}")));
@@ -249,7 +348,23 @@ impl FarmingBackend {
                 let _ = events.send(BackendEvent::Stopped);
             })?;
 
-        Ok(Self { stop, worker: Some(worker) })
+        Ok(Self { stop, worker: Some(worker), commands })
+    }
+
+    pub fn start_farming(&self) -> Result<()> {
+        self.commands.send(BackendCommand::StartFarming).map_err(|_| anyhow::anyhow!("Farming worker is not available"))
+    }
+
+    pub fn pause_farming(&self) -> Result<()> {
+        self.commands.send(BackendCommand::PauseFarming).map_err(|_| anyhow::anyhow!("Farming worker is not available"))
+    }
+
+    pub fn resume_farming(&self) -> Result<()> {
+        self.commands.send(BackendCommand::ResumeFarming).map_err(|_| anyhow::anyhow!("Farming worker is not available"))
+    }
+
+    pub fn stop_farming(&self) -> Result<()> {
+        self.commands.send(BackendCommand::StopFarming).map_err(|_| anyhow::anyhow!("Farming worker is not available"))
     }
 
     pub fn stop(&mut self) {
@@ -266,6 +381,42 @@ impl Drop for FarmingBackend {
     }
 }
 
+
+fn execute_raid_command(
+    window: &GameWindow,
+    input: &mut enigo::Enigo,
+    frame: &DynamicImage,
+    village: crate::config::Village,
+    state: BattleState,
+    command: &crate::raid::RaidCommand,
+    navigation: &RaidNavigationExecutor,
+    return_home: &ReturnHomeExecutor,
+    deployment: &DeploymentExecutor,
+    automation: &mut AutomationEngine,
+) -> Result<()> {
+    match command {
+        crate::raid::RaidCommand::OpenAttackMenu
+        | crate::raid::RaidCommand::FindOpponent
+        | crate::raid::RaidCommand::SkipOpponent => {
+            navigation.execute(window, input, frame, village, state, command)?;
+            if matches!(command, crate::raid::RaidCommand::SkipOpponent) {
+                automation.confirm_opponent_skipped()
+                    .map_err(|error| anyhow::anyhow!("Could not confirm skipped opponent: {error:?}"))?;
+            }
+        }
+        crate::raid::RaidCommand::Deploy(plan) => {
+            let receipt = deployment.execute(window, input, state, plan)?;
+            automation.confirm_deployment_started(state)
+                .map_err(|error| anyhow::anyhow!("Could not confirm deployment: {error:?}"))?;
+            tracing::info!("Deployment sent for {} ({} actions)", receipt.troop_name, receipt.actions_sent);
+        }
+        crate::raid::RaidCommand::ReturnToVillage => {
+            return_home.execute(window, input, frame, village, state)?;
+        }
+        _ => {}
+    }
+    Ok(())
+}
 
 /// Resolve the aspect-specific template pack beside the executable first, then from
 /// the current working directory. This keeps packaged builds independent of launch cwd.
