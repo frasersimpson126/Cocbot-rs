@@ -75,6 +75,22 @@ Use **Save calibration screenshot** in the connected Farming page to save the cu
 
 Opponent loot OCR is disabled by default. The Start control also requires explicit confirmation that the crop has been compared against multiple real opponent screens, and that all required screen/troop templates have been checked against live game screens. In Farming, expand **Opponent loot OCR region** and set the left, top, width and height of a tight crop around the three resource counters on the opponent-search screen. Values are percentages of the full captured game frame, so the crop scales with window resolution. Width and height must be non-zero and the crop must remain inside the frame; otherwise the pipeline keeps opponent OCR disabled. Save settings and reconnect after changing the crop. Compare recognised values against several real opponent screens before relying on target decisions. This crop is independent of the top-right player HUD crop used for session loot tracking.
 
+## Screenshot-based calibration
+
+Open **Settings → Screenshot calibration** and press **New screenshot** while Clash of Clans is visible in Google Play Games. The captured frame is displayed in the app. Choose one of the calibration areas and drag a rectangle over the relevant pixels; the editor stores the exact x/y/width/height values against the screenshot dimensions.
+
+The calibration page keeps the locations together:
+
+- **Home storage HUD** — used by the live storage OCR instead of the built-in top-right fallback crop.
+- **Opponent loot counters** — used by the opponent loot OCR pipeline and required before target-based farming can start.
+- **Troop deployment bar** and **Battle controls** — saved as additional calibration references for later detector work.
+
+Press **Save settings and coordinates** to persist the selected regions in the normal TOML config under the application's local configuration directory. A new screenshot does not discard the saved coordinates; select an area again to replace it. If the game window resolution changes, take a new screenshot and recalibrate because these are pixel coordinates.
+
+The Settings page also includes **Test connection** for Tesseract. It checks that the configured executable starts, reports its version, and confirms that English (eng) language data is installed. The Overview page shows the latest stable gold, elixir, and dark-elixir storage readings.
+
+Release builds use the Windows GUI subsystem, so launching cocbot-rs.exe does not open a console window. CI checks formatting, tests, Clippy, and the Windows release build. A tagged v* release workflow publishes the executable as a downloadable GitHub Actions artifact.
+
 ## OCR performance
 
 The resource HUD is cropped before OCR instead of passing the full game frame to Tesseract. The crop follows the upstream BasePilot reference regions (600×400 at 2560×1600 for 16:10, 550×350 at 2560×1440 for 16:9), then applies a 3× upscale and a strict bright-glyph threshold. Tesseract is invoked with:
