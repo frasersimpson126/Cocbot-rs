@@ -56,6 +56,26 @@ impl OcrEngine {
             .is_ok_and(|output| output.status.success())
     }
 
+    /// Verifies the configured executable, reports its version, and confirms English data is installed.
+    pub fn test_connection(&self) -> Result<String> {
+        let version = Command::new(&self.executable).arg("--version").output()
+            .with_context(|| format!("Could not launch Tesseract at '{}'. Check the executable path.", self.executable))?;
+        if !version.status.success() {
+            bail!("Tesseract --version failed: {}", String::from_utf8_lossy(&version.stderr).trim());
+        }
+        let version_text = String::from_utf8_lossy(&version.stdout).trim().to_owned();
+        let languages = Command::new(&self.executable).arg("--list-langs").output()
+            .context("Tesseract launched, but its language data could not be queried")?;
+        if !languages.status.success() {
+            bail!("Tesseract language check failed: {}", String::from_utf8_lossy(&languages.stderr).trim());
+        }
+        let language_text = String::from_utf8_lossy(&languages.stdout);
+        if !language_text.lines().any(|line| line.trim() == "eng") {
+            bail!("Tesseract is installed, but English language data (eng.traineddata) is missing.");
+        }
+        Ok(format!("{} — English language data available", version_text.lines().next().unwrap_or("Tesseract connected")))
+    }
+
     /// Runs Tesseract over an in-memory image. The image is streamed through stdin,
     /// avoiding per-frame temporary files and filesystem contention.
     pub fn recognise(&self, image: &DynamicImage, profile: OcrProfile) -> Result<OcrResult> {
