@@ -203,7 +203,7 @@ mod tests {
     #[test]
     fn farming_requires_next_opponent_and_connection_error_templates() {
         let groups = required_groups(ArmyStrategy::SneakyGoblin);
-        for required_name in ["next opponent", "connection error"] {
+        for required_name in ["next opponent", "attack opponent", "connection error"] {
             assert!(groups.iter().any(|group| group.name == required_name && group.required));
         }
     }
