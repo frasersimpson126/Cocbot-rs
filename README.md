@@ -70,6 +70,10 @@ screenshots before any input execution is enabled.
 
 The Farming page exposes persisted target requirements: minimum gold, elixir and dark elixir, minimum weighted loot score, and minimum OCR confidence. All three resource minimums are hard gates; loot priority controls the weighted score after those gates pass. Older config files automatically receive the defaults (300,000 gold, 300,000 elixir, 2,000 dark elixir, 45% score, 85% OCR confidence). Changes are passed to the raid evaluator when the monitoring backend starts; reconnect after changing settings to apply them to an active worker.
 
+## Opponent loot OCR calibration
+
+Opponent loot OCR is disabled by default. In Farming, expand **Opponent loot OCR region** and set the left, top, width and height of a tight crop around the three resource counters on the opponent-search screen. Values are percentages of the full captured game frame, so the crop scales with window resolution. Width and height must be non-zero and the crop must remain inside the frame; otherwise the pipeline keeps opponent OCR disabled. Save settings and reconnect after changing the crop. Compare recognised values against several real opponent screens before relying on target decisions. This crop is independent of the top-right player HUD crop used for session loot tracking.
+
 ## OCR performance
 
 The resource HUD is cropped before OCR instead of passing the full game frame to Tesseract. The crop follows the upstream BasePilot reference regions (600×400 at 2560×1600 for 16:10, 550×350 at 2560×1440 for 16:9), then applies a 3× upscale and a strict bright-glyph threshold. Tesseract is invoked with:
