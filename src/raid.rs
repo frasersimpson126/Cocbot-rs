@@ -430,6 +430,17 @@ mod tests {
     }
 
     #[test]
+    fn accepted_target_can_be_retried_after_manual_resume() {
+        let mut raid = coordinator();
+        raid.start(BattleState::HomeVillage).unwrap();
+        raid.observe_state(BattleState::OpponentFound);
+        assert_eq!(raid.evaluate_opponent(good_target()), RaidCommand::AttackOpponent);
+        raid.pause();
+        assert_eq!(raid.resume(BattleState::OpponentFound), RaidCommand::AttackOpponent);
+        assert_eq!(raid.phase(), RaidPhase::StartingBattle);
+    }
+
+    #[test]
     fn unknown_detection_never_advances_the_raid() {
         let mut raid = coordinator();
         raid.start(BattleState::HomeVillage).unwrap();
