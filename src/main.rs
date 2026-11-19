@@ -6,6 +6,7 @@ pub mod loot;
 pub mod ocr;
 pub mod strategy;
 pub mod vision;
+pub mod templates;
 pub mod battle;
 pub mod target;
 pub mod deployment;

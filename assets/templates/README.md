@@ -39,6 +39,29 @@ Use tightly cropped icons from the deployment bar, excluding adjacent troop coun
 where possible. Capture separate assets for materially different game UI scales or
 ensure template scaling has been calibrated against both aspect ratios.
 
+## Runtime validation
+
+On startup the application validates the selected pack and reports each logical
+recognition group in the Farming log. Required groups are:
+
+- Village entry: `attack.png` or `farmbattle.png` (Home Village), or `bbattack.png`
+- Search: `findnow.png` or `bbfindnow.png`
+- Matchmaking: `searching.png` or `bbsearching.png`
+- Opponent preview: `opponentfound.png`
+- Battle HUD: `endbattle.png` or `bbendbattle.png`
+- Victory and defeat: `bstar.png` / `bbstar.png`, and `defeat.png` / `bbdefeat.png`
+- Return: `returnhome.png` or `bbreturnhome.png`
+- The selected strategy's troop icon
+
+Each required logical group must have at least one valid alternative. Images must decode
+as PNG-compatible images, be between 8×8 and 2048×2048 pixels, and be no larger than
+16 MiB. Corrupt, empty, oversized and undersized files are reported individually.
+Optional groups for next-opponent, hero ability, siege machine and spells are also listed.
+
+The validation only checks file integrity and presence. It does not prove that a crop
+matches the current game UI. Calibrate every crop against real screenshots and keep
+the high confidence thresholds; do not compensate for missing assets by lowering them.
+
 ## Important
 
 The detector treats absent templates as unavailable, not as a positive match.

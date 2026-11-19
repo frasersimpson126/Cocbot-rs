@@ -9,6 +9,7 @@ use crate::{
     pipeline::BattlePipeline,
     raid::{RaidCoordinator, RaidPhase},
     target::{TargetEvaluator, TargetPolicy},
+    templates::TemplatePackDiagnostics,
     vision::SearchRegion,
 };
 use anyhow::Result;
@@ -67,8 +68,18 @@ impl FarmingBackend {
                     crate::strategy::ArmyStrategy::SuperDragon => "super_dragon.png",
                     crate::strategy::ArmyStrategy::BuilderBaseBabyDragon => "baby_dragon.png",
                 };
+                let templates = template_directory(width, height);
+                let diagnostics = TemplatePackDiagnostics::inspect(&templates, config.strategy);
+                for message in diagnostics.messages() {
+                    let _ = events.send(BackendEvent::Status(message));
+                }
+                if !diagnostics.is_ready() {
+                    let _ = events.send(BackendEvent::Status(
+                        "Automation remains unsafe: required screen and troop templates are missing or invalid. Add calibrated assets before enabling input execution.".into()
+                    ));
+                }
                 let pipeline = BattlePipeline::new(
-                    template_directory(width, height),
+                    templates,
                     ocr.clone(),
                     SearchRegion { x: 0, y: 0, width: 1, height: 1 },
                     vec![troop_template.to_owned()],
