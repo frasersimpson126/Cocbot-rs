@@ -87,7 +87,14 @@ impl FarmingBackend {
                 .without_opponent_loot_ocr()
                 .with_stable_samples(2);
 
-                let evaluator = TargetEvaluator::new(TargetPolicy::default(), config.loot_priority);
+                let policy = TargetPolicy {
+                    minimum_gold: config.minimum_gold,
+                    minimum_elixir: config.minimum_elixir,
+                    minimum_dark_elixir: config.minimum_dark_elixir,
+                    minimum_score_percent: config.minimum_score_percent,
+                    minimum_confidence_percent: config.minimum_confidence_percent,
+                };
+                let evaluator = TargetEvaluator::new(policy, config.loot_priority);
                 let raid = match RaidCoordinator::new(
                     config.village,
                     config.strategy,
