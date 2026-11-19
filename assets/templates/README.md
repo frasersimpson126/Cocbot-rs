@@ -66,12 +66,13 @@ recognition group in the Farming log. Required groups are:
 - Victory and defeat: `bstar.png` / `bbstar.png`, and `defeat.png` / `bbdefeat.png`
 - Return: `returnhome.png` or `bbreturnhome.png`
 - The next-opponent button (`next.png` or `bbnext.png`)
+- A connection-error overlay (`connectionerror.png` or `connection_error.png`)
 - The selected strategy's troop icon
 
 Each required logical group must have at least one valid alternative. Images must decode
 as PNG-compatible images, be between 8×8 and 2048×2048 pixels, and be no larger than
 16 MiB. Corrupt, empty, oversized and undersized files are reported individually.
-Optional groups for hero ability, siege machine and spells are also listed. The next-opponent button is required because rejected targets must be safely skipped before the next search.
+Optional groups for battle-ending/return transitions, hero ability, siege machine and spells are also listed. The next-opponent button is required because rejected targets must be safely skipped before the next search. A connection-error template is required so a recognised disconnect pauses the session until explicit user resume.
 
 The validation only checks file integrity and presence. It does not prove that a crop
 matches the current game UI. Calibrate every crop against real screenshots and keep
