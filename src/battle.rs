@@ -153,12 +153,26 @@ impl DeploymentBarRecognizer {
         frame: &DynamicImage,
         troop_templates: &[&str],
     ) -> Result<Vec<TroopSlot>> {
-        let bar = SearchRegion {
+        self.recognise_in_region(frame, troop_templates, None)
+    }
+
+    pub fn recognise_in_region(
+        &self,
+        frame: &DynamicImage,
+        troop_templates: &[&str],
+        calibrated_region: Option<SearchRegion>,
+    ) -> Result<Vec<TroopSlot>> {
+        let default_region = SearchRegion {
             x: 0,
             y: frame.height().saturating_mul(2) / 3,
             width: frame.width(),
             height: frame.height() - frame.height().saturating_mul(2) / 3,
         };
+        let bar = calibrated_region
+            .filter(|region| region.width > 0 && region.height > 0
+                && region.x.saturating_add(region.width) <= frame.width()
+                && region.y.saturating_add(region.height) <= frame.height())
+            .unwrap_or(default_region);
         let mut slots = Vec::new();
         for template in troop_templates {
             if !self.matcher.has_template(template) {
