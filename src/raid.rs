@@ -479,7 +479,8 @@ mod tests {
         let mut raid = coordinator();
         raid.start(BattleState::HomeVillage).unwrap();
         raid.observe_state(BattleState::OpponentFound);
-        raid.evaluate_opponent(good_target());
+        assert_eq!(raid.evaluate_opponent(good_target()), RaidCommand::AttackOpponent);
+        raid.observe_state(BattleState::HomeBattle);
         let slot = TroopSlot {
             name: "sneaky_goblin".into(),
             bounds: TemplateMatch { x: 10, y: 10, width: 30, height: 30, confidence: 0.99 },
@@ -528,7 +529,8 @@ mod tests {
         let mut raid = coordinator();
         raid.start(BattleState::HomeVillage).unwrap();
         raid.observe_state(BattleState::OpponentFound);
-        raid.evaluate_opponent(good_target());
+        assert_eq!(raid.evaluate_opponent(good_target()), RaidCommand::AttackOpponent);
+        raid.observe_state(BattleState::HomeBattle);
         let slot = TroopSlot {
             name: "sneaky_goblin".into(),
             bounds: TemplateMatch { x: 10, y: 10, width: 30, height: 30, confidence: 0.99 },
