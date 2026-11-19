@@ -296,6 +296,12 @@ impl eframe::App for CocbotApp {
                         {
                             self.logs.push(format!("Stop command failed: {error}"));
                         }
+                        if ui.button("Save calibration screenshot").clicked()
+                            && let Some(backend) = self.backend.as_ref()
+                            && let Err(error) = backend.save_calibration_screenshot()
+                        {
+                            self.logs.push(format!("Screenshot command failed: {error}"));
+                        }
                     });
                     if !self.automation_ready {
                         ui.label(format!("Farming locked: {}", self.readiness_status));
