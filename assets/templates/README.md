@@ -23,6 +23,20 @@ current working directory.
 - `attack.png` and `farmbattle.png` — Home Village entry controls
 - `returnhome.png` and `bbreturnhome.png` — result-screen return controls
 
+## Additional transition and recovery screens
+
+The detector also recognises these optional transition overlays when present:
+
+- `battleending.png` — Home Village battle ending transition
+- `bbbattleending.png` — Builder Base battle ending transition
+- `returninghome.png` — Home Village return transition
+- `bbreturninghome.png` — Builder Base return transition
+- `connectionerror.png` or `connection_error.png` — connection/lost-session overlay
+
+A stable connection-error detection pauses the raid coordinator. The bot must not
+resume automatically when the overlay disappears; recovery requires an explicit
+resume action after the screen is revalidated.
+
 ## Troop icon templates
 
 The deployment-bar recogniser accepts a caller-supplied list of PNG names.
