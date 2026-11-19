@@ -22,6 +22,22 @@ pub enum LootPriority {
     Balanced,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PixelRegion {
+    pub x: u32,
+    pub y: u32,
+    pub width: u32,
+    pub height: u32,
+}
+
+impl PixelRegion {
+    pub fn is_valid_for(self, frame_width: u32, frame_height: u32) -> bool {
+        self.width > 0 && self.height > 0
+            && self.x.checked_add(self.width).is_some_and(|right| right <= frame_width)
+            && self.y.checked_add(self.height).is_some_and(|bottom| bottom <= frame_height)
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct AppConfig {
@@ -40,6 +56,11 @@ pub struct AppConfig {
     pub opponent_loot_height_percent: u8,
     pub template_pack_calibrated: bool,
     pub opponent_loot_roi_calibrated: bool,
+    /// Exact screenshot-pixel crops selected in Settings.
+    pub hud_roi: Option<PixelRegion>,
+    pub opponent_loot_roi: Option<PixelRegion>,
+    pub troop_bar_roi: Option<PixelRegion>,
+    pub battle_controls_roi: Option<PixelRegion>,
     pub tesseract_path: String,
 }
 
@@ -60,6 +81,10 @@ impl Default for AppConfig {
             opponent_loot_height_percent: 0,
             template_pack_calibrated: false,
             opponent_loot_roi_calibrated: false,
+            hud_roi: None,
+            opponent_loot_roi: None,
+            troop_bar_roi: None,
+            battle_controls_roi: None,
             tesseract_path: String::new(),
         }
     }
@@ -98,5 +123,20 @@ impl AppConfig {
         fs::write(&tmp, toml::to_string_pretty(self)?)?;
         fs::rename(tmp, path)?;
         Ok(())
+    }
+}
+
+
+#[cfg(test)]
+mod pixel_region_tests {
+    use super::*;
+
+    #[test]
+    fn pixel_region_accepts_only_non_empty_regions_inside_frame() {
+        let region = PixelRegion { x: 100, y: 50, width: 200, height: 80 };
+        assert!(region.is_valid_for(1280, 720));
+        assert!(!region.is_valid_for(250, 720));
+        assert!(!PixelRegion { width: 0, ..region }.is_valid_for(1280, 720));
+        assert!(!PixelRegion { y: 700, ..region }.is_valid_for(1280, 720));
     }
 }
