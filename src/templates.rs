@@ -129,9 +129,14 @@ pub fn required_groups(strategy: ArmyStrategy) -> Vec<TemplateGroup> {
             group("battle HUD", &["endbattle.png"], true)
         },
         if builder {
-            group("battle result", &["bbstar.png", "bbdefeat.png", "bstar.png", "defeat.png"], true)
+            group("battle won", &["bbstar.png", "bstar.png"], true)
         } else {
-            group("battle result", &["bstar.png", "defeat.png"], true)
+            group("battle won", &["bstar.png"], true)
+        },
+        if builder {
+            group("battle lost", &["bbdefeat.png", "defeat.png"], true)
+        } else {
+            group("battle lost", &["defeat.png"], true)
         },
         if builder {
             group("return home", &["bbreturnhome.png", "returnhome.png"], true)
