@@ -14,6 +14,7 @@ pub enum RaidPhase {
     StartingMatchmaking,
     EvaluatingOpponent,
     SkippingOpponent,
+    AwaitingNextOpponent,
     AwaitingDeployment,
     DeploymentPrepared,
     InBattle,
@@ -88,9 +89,10 @@ impl RaidCoordinator {
             Village::Home => BattleState::HomeVillage,
             Village::BuilderBase => BattleState::BuilderBase,
         };
-        if state != expected_home {
+        if state != expected_home || self.phase != RaidPhase::Idle {
             return Err(RaidError::UnexpectedState);
         }
+        self.paused_from = None;
         self.phase = RaidPhase::Searching;
         Ok(RaidCommand::OpenAttackMenu)
     }
@@ -117,6 +119,11 @@ impl RaidCoordinator {
             (RaidPhase::Searching, BattleState::Matchmaking) => RaidCommand::WaitForStableFrame,
             (RaidPhase::SkippingOpponent, BattleState::OpponentFound) => RaidCommand::SkipOpponent,
             (RaidPhase::SkippingOpponent, _) => RaidCommand::WaitForStableFrame,
+            (RaidPhase::AwaitingNextOpponent, BattleState::Matchmaking) => {
+                self.phase = RaidPhase::Searching;
+                RaidCommand::WaitForStableFrame
+            }
+            (RaidPhase::AwaitingNextOpponent, _) => RaidCommand::WaitForStableFrame,
             (RaidPhase::DeploymentPrepared, _) => RaidCommand::WaitForStableFrame,
             (RaidPhase::Searching, BattleState::OpponentFound) => {
                 self.phase = RaidPhase::EvaluatingOpponent;
@@ -178,7 +185,7 @@ impl RaidCoordinator {
         if self.phase != RaidPhase::SkippingOpponent {
             return Err(RaidError::UnexpectedState);
         }
-        self.phase = RaidPhase::Searching;
+        self.phase = RaidPhase::AwaitingNextOpponent;
         Ok(())
     }
 
@@ -231,7 +238,7 @@ impl RaidCoordinator {
     }
 
     pub fn pause(&mut self) {
-        if self.phase != RaidPhase::Paused {
+        if !matches!(self.phase, RaidPhase::Idle | RaidPhase::Paused) {
             self.paused_from = Some(self.phase);
             self.phase = RaidPhase::Paused;
         }
@@ -269,6 +276,10 @@ impl RaidCoordinator {
             }
             (RaidPhase::SkippingOpponent, BattleState::OpponentFound) => {
                 self.phase = RaidPhase::SkippingOpponent;
+                RaidCommand::WaitForStableFrame
+            }
+            (RaidPhase::AwaitingNextOpponent, BattleState::OpponentFound | BattleState::Matchmaking) => {
+                self.phase = RaidPhase::AwaitingNextOpponent;
                 RaidCommand::WaitForStableFrame
             }
             (RaidPhase::StartingMatchmaking, BattleState::AttackMenu | BattleState::Matchmaking) => {
@@ -366,6 +377,9 @@ mod tests {
         assert_eq!(raid.phase(), RaidPhase::SkippingOpponent);
         assert_eq!(raid.observe_state(BattleState::OpponentFound), RaidCommand::WaitForStableFrame);
         raid.confirm_opponent_skipped().unwrap();
+        assert_eq!(raid.phase(), RaidPhase::AwaitingNextOpponent);
+        assert_eq!(raid.observe_state(BattleState::OpponentFound), RaidCommand::WaitForStableFrame);
+        assert_eq!(raid.observe_state(BattleState::Matchmaking), RaidCommand::WaitForStableFrame);
         assert_eq!(raid.phase(), RaidPhase::Searching);
     }
 
