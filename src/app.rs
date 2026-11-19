@@ -417,7 +417,7 @@ impl eframe::App for CocbotApp {
                 if let Some(region) = self.selected_region() {
                     ui.label(format!("x={}  y={}  width={}  height={}", region.x, region.y, region.width, region.height));
                 } else { ui.label("No saved area for this item."); }
-                if let (Some(texture), Some((width, height))) = (&self.screenshot_texture, self.screenshot_dimensions) {
+                if let (Some(texture), Some((width, height))) = (self.screenshot_texture.clone(), self.screenshot_dimensions) {
                     let available = ui.available_size();
                     let scale = (available.x / width as f32).min(500.0 / height as f32).min(1.0);
                     let size = egui::vec2(width as f32 * scale, height as f32 * scale);
