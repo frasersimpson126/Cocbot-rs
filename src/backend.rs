@@ -96,12 +96,19 @@ impl FarmingBackend {
                 for message in diagnostics.messages() {
                     let _ = events.send(BackendEvent::Status(message));
                 }
+                let ocr_available = ocr.is_available();
+                if !ocr_available {
+                    let _ = events.send(BackendEvent::Status(format!("Tesseract OCR is unavailable at '{}'; configure its executable path before farming.", ocr.executable())));
+                }
                 let can_start = diagnostics.is_ready()
                     && opponent_roi.is_some()
+                    && ocr_available
                     && config.template_pack_calibrated
                     && config.opponent_loot_roi_calibrated;
                 let readiness_reason = if !diagnostics.is_ready() {
                     "Required screen or selected troop templates are missing/invalid.".to_owned()
+                } else if !ocr_available {
+                    format!("Tesseract OCR is unavailable at '{}'.", ocr.executable())
                 } else if opponent_roi.is_none() {
                     "Configure a valid opponent-loot OCR crop before starting.".to_owned()
                 } else if !config.template_pack_calibrated {
