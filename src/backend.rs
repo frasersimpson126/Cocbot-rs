@@ -456,6 +456,7 @@ impl FarmingBackend {
                                     per_hour: summary.per_hour,
                                     elapsed: summary.elapsed,
                                 });
+                                let _ = events.send(BackendEvent::StorageUpdated(snapshot));
                                 stable_count = 0;
                             }
                         }
