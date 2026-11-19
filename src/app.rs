@@ -1,13 +1,13 @@
 use crate::{
-    config::{AppConfig, LootPriority, Village},
+    config::{AppConfig, LootPriority, PixelRegion, Village},
     battle::BattleState,
-    loot::{LootTracker, LootDelta},
+    loot::{LootTracker, LootDelta, ResourceSnapshot},
     backend::{BackendEvent, FarmingBackend},
     ocr::OcrEngine,
     strategy::ArmyStrategy,
 };
 use eframe::egui;
-use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
+use std::{path::PathBuf, sync::mpsc::{self, Receiver, Sender, TryRecvError}};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Page {
@@ -15,6 +15,16 @@ enum Page {
     Farming,
     Settings,
     Logs,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CalibrationTarget { StorageHud, OpponentLoot, TroopBar, BattleControls }
+impl CalibrationTarget {
+    const ALL: [Self; 4] = [Self::StorageHud, Self::OpponentLoot, Self::TroopBar, Self::BattleControls];
+    fn label(self) -> &'static str { match self {
+        Self::StorageHud => "Home storage HUD", Self::OpponentLoot => "Opponent loot counters",
+        Self::TroopBar => "Troop deployment bar", Self::BattleControls => "Battle controls",
+    }}
 }
 
 pub struct CocbotApp {
@@ -31,6 +41,12 @@ pub struct CocbotApp {
     readiness_status: String,
     backend_loot: Option<(LootDelta, LootDelta)>,
     backend_elapsed: Option<std::time::Duration>,
+    current_storage: Option<ResourceSnapshot>,
+    screenshot_texture: Option<egui::TextureHandle>,
+    screenshot_dimensions: Option<(u32, u32)>,
+    calibration_target: CalibrationTarget,
+    selection_start: Option<egui::Pos2>,
+    tesseract_status: String,
     event_tx: Sender<BackendEvent>,
     event_rx: Receiver<BackendEvent>,
 }
@@ -39,6 +55,13 @@ impl CocbotApp {
     pub fn new(cc: &eframe::CreationContext<'_>, config: AppConfig) -> Self {
         let mut style = (*cc.egui_ctx.style()).clone();
         style.visuals = egui::Visuals::dark();
+        style.spacing.item_spacing = egui::vec2(12.0, 12.0);
+        style.spacing.button_padding = egui::vec2(18.0, 11.0);
+        style.spacing.interact_size.y = 42.0;
+        style.spacing.window_margin = egui::Margin::same(16);
+        style.visuals.widgets.inactive.bg_fill = egui::Color32::from_rgb(39, 48, 64);
+        style.visuals.widgets.hovered.bg_fill = egui::Color32::from_rgb(55, 69, 91);
+        style.visuals.widgets.active.bg_fill = egui::Color32::from_rgb(67, 103, 156);
         cc.egui_ctx.set_style(style);
         let (event_tx, event_rx) = mpsc::channel();
         Self {
@@ -55,6 +78,12 @@ impl CocbotApp {
             readiness_status: "Connect the game to inspect required templates and OCR calibration.".into(),
             backend_loot: None,
             backend_elapsed: None,
+            current_storage: None,
+            screenshot_texture: None,
+            screenshot_dimensions: None,
+            calibration_target: CalibrationTarget::StorageHud,
+            selection_start: None,
+            tesseract_status: "Not tested".into(),
             event_tx,
             event_rx,
         }
@@ -63,6 +92,38 @@ impl CocbotApp {
     fn nav(ui: &mut egui::Ui, current: &mut Page, page: Page, label: &str) {
         if ui.selectable_label(*current == page, label).clicked() {
             *current = page;
+        }
+    }
+
+    fn load_screenshot(&mut self, ctx: &egui::Context, path: PathBuf) {
+        match image::open(path) {
+            Ok(image) => {
+                let rgba = image.to_rgba8();
+                let size = [rgba.width() as usize, rgba.height() as usize];
+                let color = egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw());
+                self.screenshot_texture = Some(ctx.load_texture("calibration-screenshot", color, egui::TextureOptions::LINEAR));
+                self.screenshot_dimensions = Some((rgba.width(), rgba.height()));
+                self.selection_start = None;
+            }
+            Err(error) => self.logs.push(format!("Could not open calibration screenshot: {error}")),
+        }
+    }
+
+    fn selected_region(&self) -> Option<PixelRegion> {
+        match self.calibration_target {
+            CalibrationTarget::StorageHud => self.config.hud_roi,
+            CalibrationTarget::OpponentLoot => self.config.opponent_loot_roi,
+            CalibrationTarget::TroopBar => self.config.troop_bar_roi,
+            CalibrationTarget::BattleControls => self.config.battle_controls_roi,
+        }
+    }
+
+    fn set_selected_region(&mut self, region: Option<PixelRegion>) {
+        match self.calibration_target {
+            CalibrationTarget::StorageHud => self.config.hud_roi = region,
+            CalibrationTarget::OpponentLoot => { self.config.opponent_loot_roi = region; self.config.opponent_loot_roi_calibrated = false; },
+            CalibrationTarget::TroopBar => self.config.troop_bar_roi = region,
+            CalibrationTarget::BattleControls => self.config.battle_controls_roi = region,
         }
     }
 
@@ -107,6 +168,7 @@ impl eframe::App for CocbotApp {
                         self.backend_loot = Some((total, per_hour));
                         self.backend_elapsed = Some(elapsed);
                     }
+                    BackendEvent::StorageUpdated(snapshot) => self.current_storage = Some(snapshot),
                     BackendEvent::Status(message) => self.logs.push(message),
                     BackendEvent::Error(message) => {
                         self.backend_status = format!("Error: {message}");
@@ -147,7 +209,16 @@ impl eframe::App for CocbotApp {
         egui::CentralPanel::default().show(ctx, |ui| match self.page {
             Page::Overview => {
                 ui.heading("Farming overview");
-                ui.label("Live game capture and HUD OCR status is shown in the Farming page.");
+                ui.label("Live game capture, OCR and farming status.");
+                ui.separator();
+                ui.heading("Current storages");
+                if let Some(storage) = self.current_storage {
+                    ui.horizontal(|ui| {
+                        ui.label(format!("Gold: {:}", storage.gold));
+                        ui.label(format!("Elixir: {:}", storage.elixir));
+                        ui.label(format!("Dark elixir: {:}", storage.dark_elixir));
+                    });
+                } else { ui.label("Waiting for OCR readings. Connect to the game to read storage values."); }
                 ui.separator();
                 let summary = self.loot.summary();
                 let (total, per_hour) = self.backend_loot.unwrap_or((summary.total, summary.per_hour));
