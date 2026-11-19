@@ -31,7 +31,8 @@ The detector also recognises these optional transition overlays when present:
 - `bbbattleending.png` — Builder Base battle ending transition
 - `returninghome.png` — Home Village return transition
 - `bbreturninghome.png` — Builder Base return transition
-- `connectionerror.png` or `connection_error.png` — connection/lost-session overlay
+
+The connection/lost-session overlay (`connectionerror.png` or `connection_error.png`) is required before farming can start, so a recognised disconnect pauses the active raid until explicit user resume.
 
 A stable connection-error detection pauses the raid coordinator. The bot must not
 resume automatically when the overlay disappears; recovery requires an explicit
