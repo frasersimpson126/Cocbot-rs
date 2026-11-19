@@ -57,9 +57,18 @@ impl FarmingBackend {
                 let (width, height) = window.dimensions();
                 let _ = events.send(BackendEvent::Connected { width, height });
 
-                // No opponent ROI or troop templates are configured yet. This connects
-                // live frames to state recognition without treating guessed coordinates
-                // or absent assets as evidence for an attack.
+                // Opponent loot OCR is opt-in: only a user-calibrated crop is passed
+                // to the pipeline. A missing or invalid crop keeps target decisions disabled.
+                let opponent_roi = opponent_loot_region(width, height, &config);
+                if opponent_roi.is_some() {
+                    let _ = events.send(BackendEvent::Status(
+                        "Opponent loot OCR enabled with the saved, user-calibrated crop. Verify readings against the live opponent screen before enabling input.".into()
+                    ));
+                } else {
+                    let _ = events.send(BackendEvent::Status(
+                        "Opponent loot OCR disabled: set a valid crop in Farming > Opponent loot OCR region.".into()
+                    ));
+                }
                 let troop_template = match config.strategy {
                     crate::strategy::ArmyStrategy::SneakyGoblin => "sneaky_goblin.png",
                     crate::strategy::ArmyStrategy::Valkyrie => "valkyrie.png",
@@ -81,11 +90,15 @@ impl FarmingBackend {
                 let pipeline = BattlePipeline::new(
                     templates,
                     ocr.clone(),
-                    SearchRegion { x: 0, y: 0, width: 1, height: 1 },
+                    opponent_roi.unwrap_or(SearchRegion { x: 0, y: 0, width: 1, height: 1 }),
                     vec![troop_template.to_owned()],
-                )
-                .without_opponent_loot_ocr()
-                .with_stable_samples(2);
+                );
+                let pipeline = if opponent_roi.is_some() {
+                    pipeline
+                } else {
+                    pipeline.without_opponent_loot_ocr()
+                };
+                let pipeline = pipeline.with_stable_samples(2);
 
                 let policy = TargetPolicy {
                     minimum_gold: config.minimum_gold,
@@ -252,6 +265,27 @@ fn sleep_interruptibly(stop: &AtomicBool, duration: Duration) {
         thread::sleep(sleep);
         remaining = remaining.saturating_sub(sleep);
     }
+}
+
+
+/// Converts a user-calibrated percentage crop into captured-frame pixels.
+/// A zero-sized crop or coordinates extending beyond the frame disables OCR.
+fn opponent_loot_region(width: u32, height: u32, config: &AppConfig) -> Option<SearchRegion> {
+    let x = config.opponent_loot_x_percent as u16;
+    let y = config.opponent_loot_y_percent as u16;
+    let w = config.opponent_loot_width_percent as u16;
+    let h = config.opponent_loot_height_percent as u16;
+    if width == 0 || height == 0 || w == 0 || h == 0 || x + w > 100 || y + h > 100 {
+        return None;
+    }
+    let pixel_x = width.saturating_mul(x as u32) / 100;
+    let pixel_y = height.saturating_mul(y as u32) / 100;
+    let pixel_width = width.saturating_mul(w as u32) / 100;
+    let pixel_height = height.saturating_mul(h as u32) / 100;
+    if pixel_width == 0 || pixel_height == 0 {
+        return None;
+    }
+    Some(SearchRegion { x: pixel_x, y: pixel_y, width: pixel_width, height: pixel_height })
 }
 
 /// Crops the top-right HUD before OCR. Restricting OCR to this ROI is substantially
