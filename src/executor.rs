@@ -270,6 +270,14 @@ impl RaidNavigationExecutor {
                 };
                 (names, BattleState::OpponentFound, Some(bottom_region(frame)))
             }
+            RaidCommand::AttackOpponent => {
+                let names: &[&str] = if village == Village::BuilderBase {
+                    &["bbattacknow.png", "attacknow.png", "attack_now.png"]
+                } else {
+                    &["attacknow.png", "attack_now.png", "attackbutton.png"]
+                };
+                (names, BattleState::OpponentFound, Some(bottom_region(frame)))
+            }
             _ => bail!("Command is not a matchmaking navigation action"),
         };
         if state != expected_state {
