@@ -28,6 +28,11 @@ pub struct AppConfig {
     pub village: Village,
     pub strategy: ArmyStrategy,
     pub loot_priority: LootPriority,
+    pub minimum_gold: u64,
+    pub minimum_elixir: u64,
+    pub minimum_dark_elixir: u64,
+    pub minimum_score_percent: u8,
+    pub minimum_confidence_percent: u8,
     pub tesseract_path: String,
 }
 
@@ -37,6 +42,11 @@ impl Default for AppConfig {
             village: Village::Home,
             strategy: ArmyStrategy::SneakyGoblin,
             loot_priority: LootPriority::Balanced,
+            minimum_gold: 300_000,
+            minimum_elixir: 300_000,
+            minimum_dark_elixir: 2_000,
+            minimum_score_percent: 45,
+            minimum_confidence_percent: 85,
             tesseract_path: String::new(),
         }
     }
