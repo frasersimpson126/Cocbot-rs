@@ -117,9 +117,11 @@ impl FarmingBackend {
                         "Automation remains locked: required screen and troop templates are missing or invalid.".into()
                     ));
                 }
-                let navigation = RaidNavigationExecutor::new(TemplateMatcher::new(templates.clone()));
-                let return_home = ReturnHomeExecutor::new(TemplateMatcher::new(templates.clone()));
-                let deployment = DeploymentExecutor::default();
+                let executors = FarmingExecutors {
+                    navigation: RaidNavigationExecutor::new(TemplateMatcher::new(templates.clone())),
+                    return_home: ReturnHomeExecutor::new(TemplateMatcher::new(templates.clone())),
+                    deployment: DeploymentExecutor::default(),
+                };
                 let mut input = None;
                 let pipeline = BattlePipeline::new(
                     templates,
@@ -411,7 +413,7 @@ impl FarmingBackend {
                             {
                                 if let Err(error) = execute_raid_command(
                                     input_device, &frame, config.village, state, &command,
-                                    &navigation, &return_home, &deployment, &mut automation,
+                                    &executors, &mut automation,
                                 ) {
                                     let _ = events.send(BackendEvent::Error(format!("Action refused or failed: {error}")));
                                     if matches!(&command, crate::raid::RaidCommand::Deploy(_)) {
@@ -515,15 +517,19 @@ fn save_calibration_screenshot(frame: &DynamicImage) -> Result<PathBuf> {
     Ok(path)
 }
 
+struct FarmingExecutors {
+    navigation: RaidNavigationExecutor,
+    return_home: ReturnHomeExecutor,
+    deployment: DeploymentExecutor,
+}
+
 fn execute_raid_command(
     input: &mut enigo::Enigo,
     frame: &DynamicImage,
     village: crate::config::Village,
     state: BattleState,
     command: &crate::raid::RaidCommand,
-    navigation: &RaidNavigationExecutor,
-    return_home: &ReturnHomeExecutor,
-    deployment: &DeploymentExecutor,
+    executors: &FarmingExecutors,
     automation: &mut AutomationEngine,
 ) -> Result<()> {
     // Re-resolve the window immediately before sending input so a moved or
@@ -537,20 +543,20 @@ fn execute_raid_command(
         | crate::raid::RaidCommand::FindOpponent
         | crate::raid::RaidCommand::SkipOpponent
         | crate::raid::RaidCommand::AttackOpponent => {
-            navigation.execute(&action_window, input, frame, village, state, command)?;
+            executors.navigation.execute(&action_window, input, frame, village, state, command)?;
             if matches!(command, crate::raid::RaidCommand::SkipOpponent) {
                 automation.confirm_opponent_skipped()
                     .map_err(|error| anyhow::anyhow!("Could not confirm skipped opponent: {error:?}"))?;
             }
         }
         crate::raid::RaidCommand::Deploy(plan) => {
-            let receipt = deployment.execute(&action_window, input, state, plan)?;
+            let receipt = executors.deployment.execute(&action_window, input, state, plan)?;
             automation.confirm_deployment_started(state)
                 .map_err(|error| anyhow::anyhow!("Could not confirm deployment: {error:?}"))?;
             tracing::info!("Deployment sent for {} ({} actions)", receipt.troop_name, receipt.actions_sent);
         }
         crate::raid::RaidCommand::ReturnToVillage => {
-            return_home.execute(&action_window, input, frame, village, state)?;
+            executors.return_home.execute(&action_window, input, frame, village, state)?;
         }
         _ => {}
     }
