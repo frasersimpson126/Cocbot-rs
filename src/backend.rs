@@ -394,24 +394,30 @@ fn execute_raid_command(
     deployment: &DeploymentExecutor,
     automation: &mut AutomationEngine,
 ) -> Result<()> {
+    // Re-resolve the window immediately before sending input so a moved or
+    // minimised game window cannot leave stale desktop coordinates in use.
+    let action_window = GameWindow::find()?;
+    if action_window.dimensions() != (frame.width(), frame.height()) {
+        anyhow::bail!("Game window dimensions changed during farming; reconnect and recalibrate before continuing");
+    }
     match command {
         crate::raid::RaidCommand::OpenAttackMenu
         | crate::raid::RaidCommand::FindOpponent
         | crate::raid::RaidCommand::SkipOpponent => {
-            navigation.execute(window, input, frame, village, state, command)?;
+            navigation.execute(&action_window, input, frame, village, state, command)?;
             if matches!(command, crate::raid::RaidCommand::SkipOpponent) {
                 automation.confirm_opponent_skipped()
                     .map_err(|error| anyhow::anyhow!("Could not confirm skipped opponent: {error:?}"))?;
             }
         }
         crate::raid::RaidCommand::Deploy(plan) => {
-            let receipt = deployment.execute(window, input, state, plan)?;
+            let receipt = deployment.execute(&action_window, input, state, plan)?;
             automation.confirm_deployment_started(state)
                 .map_err(|error| anyhow::anyhow!("Could not confirm deployment: {error:?}"))?;
             tracing::info!("Deployment sent for {} ({} actions)", receipt.troop_name, receipt.actions_sent);
         }
         crate::raid::RaidCommand::ReturnToVillage => {
-            return_home.execute(window, input, frame, village, state)?;
+            return_home.execute(&action_window, input, frame, village, state)?;
         }
         _ => {}
     }
