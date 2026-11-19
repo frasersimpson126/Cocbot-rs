@@ -13,6 +13,7 @@ pub enum RaidPhase {
     Searching,
     StartingMatchmaking,
     EvaluatingOpponent,
+    StartingBattle,
     SkippingOpponent,
     AwaitingNextOpponent,
     AwaitingDeployment,
@@ -29,6 +30,7 @@ pub enum RaidCommand {
     OpenAttackMenu,
     FindOpponent,
     SkipOpponent,
+    AttackOpponent,
     Deploy(DeploymentPlan),
     ReturnToVillage,
     RaidFinished,
@@ -116,6 +118,15 @@ impl RaidCoordinator {
                 RaidCommand::WaitForStableFrame
             }
             (RaidPhase::StartingMatchmaking, _) => RaidCommand::WaitForStableFrame,
+            (RaidPhase::StartingBattle, BattleState::HomeBattle) if self.village == Village::Home => {
+                self.phase = RaidPhase::AwaitingDeployment;
+                RaidCommand::WaitForStableFrame
+            }
+            (RaidPhase::StartingBattle, BattleState::BuilderBattle) if self.village == Village::BuilderBase => {
+                self.phase = RaidPhase::AwaitingDeployment;
+                RaidCommand::WaitForStableFrame
+            }
+            (RaidPhase::StartingBattle, _) => RaidCommand::WaitForStableFrame,
             (RaidPhase::Searching, BattleState::Matchmaking) => RaidCommand::WaitForStableFrame,
             (RaidPhase::SkippingOpponent, BattleState::OpponentFound) => RaidCommand::SkipOpponent,
             (RaidPhase::SkippingOpponent, _) => RaidCommand::WaitForStableFrame,
@@ -162,9 +173,9 @@ impl RaidCoordinator {
         let evaluation = self.evaluator.evaluate(candidate);
         self.last_evaluation = Some(evaluation);
         if evaluation.accepted {
-            self.phase = RaidPhase::AwaitingDeployment;
-            // The backend must call prepare_deployment once troop slots are recognised.
-            RaidCommand::WaitForStableFrame
+            self.phase = RaidPhase::StartingBattle;
+            // An accepted target still requires the opponent-screen Attack button.
+            RaidCommand::AttackOpponent
         } else {
             self.phase = RaidPhase::SkippingOpponent;
             RaidCommand::SkipOpponent
@@ -286,6 +297,18 @@ impl RaidCoordinator {
                 self.phase = RaidPhase::StartingMatchmaking;
                 RaidCommand::FindOpponent
             }
+            (RaidPhase::StartingBattle, BattleState::OpponentFound) => {
+                self.phase = RaidPhase::StartingBattle;
+                RaidCommand::AttackOpponent
+            }
+            (RaidPhase::StartingBattle, BattleState::HomeBattle) if self.village == Village::Home => {
+                self.phase = RaidPhase::AwaitingDeployment;
+                RaidCommand::WaitForStableFrame
+            }
+            (RaidPhase::StartingBattle, BattleState::BuilderBattle) if self.village == Village::BuilderBase => {
+                self.phase = RaidPhase::AwaitingDeployment;
+                RaidCommand::WaitForStableFrame
+            }
             (RaidPhase::StartingMatchmaking, BattleState::Matchmaking) => {
                 self.phase = RaidPhase::Searching;
                 RaidCommand::WaitForStableFrame
@@ -396,7 +419,9 @@ mod tests {
         let mut raid = coordinator();
         raid.start(BattleState::HomeVillage).unwrap();
         raid.observe_state(BattleState::OpponentFound);
-        assert_eq!(raid.evaluate_opponent(good_target()), RaidCommand::WaitForStableFrame);
+        assert_eq!(raid.evaluate_opponent(good_target()), RaidCommand::AttackOpponent);
+        assert_eq!(raid.phase(), RaidPhase::StartingBattle);
+        assert_eq!(raid.observe_state(BattleState::HomeBattle), RaidCommand::WaitForStableFrame);
         assert_eq!(raid.phase(), RaidPhase::AwaitingDeployment);
         assert_eq!(
             raid.prepare_deployment(BattleState::Matchmaking, Viewport { width: 1280, height: 720 }, &[]),
@@ -417,7 +442,8 @@ mod tests {
         let mut raid = coordinator();
         raid.start(BattleState::HomeVillage).unwrap();
         raid.observe_state(BattleState::OpponentFound);
-        raid.evaluate_opponent(good_target());
+        assert_eq!(raid.evaluate_opponent(good_target()), RaidCommand::AttackOpponent);
+        raid.observe_state(BattleState::HomeBattle);
         let slot = TroopSlot {
             name: "sneaky_goblin".into(),
             bounds: TemplateMatch { x: 10, y: 10, width: 30, height: 30, confidence: 0.99 },
