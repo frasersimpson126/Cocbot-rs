@@ -383,7 +383,7 @@ mod tests {
         };
         assert_eq!(raid.evaluate_opponent(bad), RaidCommand::SkipOpponent);
         assert_eq!(raid.phase(), RaidPhase::SkippingOpponent);
-        assert_eq!(raid.observe_state(BattleState::OpponentFound), RaidCommand::WaitForStableFrame);
+        assert_eq!(raid.observe_state(BattleState::OpponentFound), RaidCommand::SkipOpponent);
         raid.confirm_opponent_skipped().unwrap();
         assert_eq!(raid.phase(), RaidPhase::AwaitingNextOpponent);
         assert_eq!(raid.observe_state(BattleState::OpponentFound), RaidCommand::WaitForStableFrame);
