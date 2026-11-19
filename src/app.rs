@@ -196,6 +196,18 @@ impl eframe::App for CocbotApp {
                     ui.end_row();
                 });
                 ui.add_space(10.0);
+                ui.collapsing("Opponent loot OCR region", |ui| {
+                    ui.label("Set a crop around the three opponent resource counters. Values are percentages of the full captured game frame; leave width/height at 0 to keep opponent OCR disabled.");
+                    ui.add(egui::Slider::new(&mut self.config.opponent_loot_x_percent, 0..=100).text("Left (%)"));
+                    ui.add(egui::Slider::new(&mut self.config.opponent_loot_y_percent, 0..=100).text("Top (%)"));
+                    ui.add(egui::Slider::new(&mut self.config.opponent_loot_width_percent, 0..=100).text("Width (%)"));
+                    ui.add(egui::Slider::new(&mut self.config.opponent_loot_height_percent, 0..=100).text("Height (%)"));
+                    let valid = self.config.opponent_loot_width_percent > 0
+                        && self.config.opponent_loot_height_percent > 0
+                        && self.config.opponent_loot_x_percent as u16 + self.config.opponent_loot_width_percent as u16 <= 100
+                        && self.config.opponent_loot_y_percent as u16 + self.config.opponent_loot_height_percent as u16 <= 100;
+                    ui.label(if valid { "Crop configured; compare OCR output with real opponent loot before trusting it." } else { "Crop disabled or outside the frame." });
+                });
                 ui.collapsing("Target requirements", |ui| {
                     ui.label("A target must meet all three resource minimums and the weighted score/confidence thresholds.");
                     ui.add(egui::Slider::new(&mut self.config.minimum_gold, 100_000..=2_000_000)
