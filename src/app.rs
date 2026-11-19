@@ -381,6 +381,7 @@ impl eframe::App for CocbotApp {
                 }
             }
             Page::Settings => {
+                egui::ScrollArea::vertical().show(ui, |ui| {
                 ui.heading("Settings");
                 ui.heading("Tesseract OCR");
                 ui.horizontal(|ui| {
@@ -452,6 +453,7 @@ impl eframe::App for CocbotApp {
                         Err(error) => self.logs.push(format!("Settings save failed: {error}")),
                     }
                 }
+                });
             }
             Page::Logs => {
                 ui.heading("Logs");
