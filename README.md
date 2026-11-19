@@ -73,7 +73,24 @@ The Farming page exposes persisted target requirements: minimum gold, elixir and
 
 Use **Save calibration screenshot** in the connected Farming page to save the current game frame under the application's local data directory (`calibration/`). Crop the required screen-state, button and troop templates from those captures using an image editor, then place the PNGs in the matching aspect-ratio folder under the same local data directory (`assets/templates/16_9/` or `assets/templates/16_10/`). The backend checks this user-writable location before looking beside the executable. The screenshot stays on the local machine.
 
-Opponent loot OCR is disabled by default. The Start control also requires explicit confirmation that the crop has been compared against multiple real opponent screens, and that all required screen/troop templates have been checked against live game screens. In Farming, expand **Opponent loot OCR region** and set the left, top, width and height of a tight crop around the three resource counters on the opponent-search screen. Values are percentages of the full captured game frame, so the crop scales with window resolution. Width and height must be non-zero and the crop must remain inside the frame; otherwise the pipeline keeps opponent OCR disabled. Save settings and reconnect after changing the crop. Compare recognised values against several real opponent screens before relying on target decisions. This crop is independent of the top-right player HUD crop used for session loot tracking.
+Opponent loot OCR is disabled by default. Use **Settings → Screen area calibration → Opponent loot counters** to select a tight rectangle around the three resource counters on the opponent-search screen. The selected pixel crop is passed directly to the target evaluator. The Start control still requires explicit confirmation that the crop has been compared against multiple real opponent screens, and that all required screen/troop templates have been checked against live game screens. Compare recognised values against several real opponent screens before relying on target decisions. The opponent crop is independent of the home storage HUD crop used for session tracking.
+
+## Screenshot-based calibration
+
+Open **Settings → Screenshot calibration** and press **New screenshot** while Clash of Clans is visible in Google Play Games. The captured frame is displayed in the app. Choose one of the calibration areas and drag a rectangle over the relevant pixels; the editor stores the exact x/y/width/height values against the screenshot dimensions.
+
+The calibration page keeps the locations together:
+
+- **Home storage HUD** — used by the live storage OCR instead of the built-in top-right fallback crop.
+- **Opponent loot counters** — used by the opponent loot OCR pipeline and required before target-based farming can start.
+- **Troop deployment bar** — used by troop-icon recognition instead of its default lower-screen search band.
+- **Battle controls** — saved as a reference crop for future navigation-template calibration; current navigation matching still uses its existing validated search regions.
+
+Press **Save settings and coordinates** to persist the selected regions in the normal TOML config under the application's local configuration directory. A new screenshot does not discard the saved coordinates; select an area again to replace it. If the game window resolution changes, take a new screenshot and recalibrate because these are pixel coordinates.
+
+The Settings page also includes **Test connection** for Tesseract. It checks that the configured executable starts, reports its version, and confirms that English (eng) language data is installed. The Overview page shows the latest stable gold, elixir, and dark-elixir storage readings.
+
+Release builds use the Windows GUI subsystem, so launching cocbot-rs.exe does not open a console window. The existing Windows CI workflow runs unit tests, Clippy, and a release build. A tagged v* release workflow publishes the executable as a downloadable GitHub Actions artifact.
 
 ## OCR performance
 

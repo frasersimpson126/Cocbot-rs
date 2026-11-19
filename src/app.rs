@@ -1,13 +1,13 @@
 use crate::{
-    config::{AppConfig, LootPriority, Village},
+    config::{AppConfig, LootPriority, PixelRegion, Village},
     battle::BattleState,
-    loot::{LootTracker, LootDelta},
+    loot::{LootTracker, LootDelta, ResourceSnapshot},
     backend::{BackendEvent, FarmingBackend},
     ocr::OcrEngine,
     strategy::ArmyStrategy,
 };
 use eframe::egui;
-use std::sync::mpsc::{self, Receiver, Sender, TryRecvError};
+use std::{path::PathBuf, sync::mpsc::{self, Receiver, Sender, TryRecvError}};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Page {
@@ -15,6 +15,16 @@ enum Page {
     Farming,
     Settings,
     Logs,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CalibrationTarget { StorageHud, OpponentLoot, TroopBar, BattleControls }
+impl CalibrationTarget {
+    const ALL: [Self; 4] = [Self::StorageHud, Self::OpponentLoot, Self::TroopBar, Self::BattleControls];
+    fn label(self) -> &'static str { match self {
+        Self::StorageHud => "Home storage HUD", Self::OpponentLoot => "Opponent loot counters",
+        Self::TroopBar => "Troop deployment bar", Self::BattleControls => "Battle controls (reference)",
+    }}
 }
 
 pub struct CocbotApp {
@@ -31,6 +41,12 @@ pub struct CocbotApp {
     readiness_status: String,
     backend_loot: Option<(LootDelta, LootDelta)>,
     backend_elapsed: Option<std::time::Duration>,
+    current_storage: Option<ResourceSnapshot>,
+    screenshot_texture: Option<egui::TextureHandle>,
+    screenshot_dimensions: Option<(u32, u32)>,
+    calibration_target: CalibrationTarget,
+    selection_start: Option<egui::Pos2>,
+    tesseract_status: String,
     event_tx: Sender<BackendEvent>,
     event_rx: Receiver<BackendEvent>,
 }
@@ -39,6 +55,13 @@ impl CocbotApp {
     pub fn new(cc: &eframe::CreationContext<'_>, config: AppConfig) -> Self {
         let mut style = (*cc.egui_ctx.style()).clone();
         style.visuals = egui::Visuals::dark();
+        style.spacing.item_spacing = egui::vec2(12.0, 12.0);
+        style.spacing.button_padding = egui::vec2(18.0, 11.0);
+        style.spacing.interact_size.y = 42.0;
+        style.spacing.window_margin = egui::Margin::same(16);
+        style.visuals.widgets.inactive.bg_fill = egui::Color32::from_rgb(39, 48, 64);
+        style.visuals.widgets.hovered.bg_fill = egui::Color32::from_rgb(55, 69, 91);
+        style.visuals.widgets.active.bg_fill = egui::Color32::from_rgb(67, 103, 156);
         cc.egui_ctx.set_style(style);
         let (event_tx, event_rx) = mpsc::channel();
         Self {
@@ -55,14 +78,54 @@ impl CocbotApp {
             readiness_status: "Connect the game to inspect required templates and OCR calibration.".into(),
             backend_loot: None,
             backend_elapsed: None,
+            current_storage: None,
+            screenshot_texture: None,
+            screenshot_dimensions: None,
+            calibration_target: CalibrationTarget::StorageHud,
+            selection_start: None,
+            tesseract_status: "Not tested".into(),
             event_tx,
             event_rx,
         }
     }
 
     fn nav(ui: &mut egui::Ui, current: &mut Page, page: Page, label: &str) {
-        if ui.selectable_label(*current == page, label).clicked() {
+        let active = *current == page;
+        let fill = if active { egui::Color32::from_rgb(49, 91, 145) } else { egui::Color32::from_rgb(32, 40, 54) };
+        if ui.add_sized([ui.available_width(), 46.0], egui::Button::new(label).fill(fill)).clicked() {
             *current = page;
+        }
+    }
+
+    fn load_screenshot(&mut self, ctx: &egui::Context, path: PathBuf) {
+        match image::open(path) {
+            Ok(image) => {
+                let rgba = image.to_rgba8();
+                let size = [rgba.width() as usize, rgba.height() as usize];
+                let color = egui::ColorImage::from_rgba_unmultiplied(size, rgba.as_raw());
+                self.screenshot_texture = Some(ctx.load_texture("calibration-screenshot", color, egui::TextureOptions::LINEAR));
+                self.screenshot_dimensions = Some((rgba.width(), rgba.height()));
+                self.selection_start = None;
+            }
+            Err(error) => self.logs.push(format!("Could not open calibration screenshot: {error}")),
+        }
+    }
+
+    fn selected_region(&self) -> Option<PixelRegion> {
+        match self.calibration_target {
+            CalibrationTarget::StorageHud => self.config.hud_roi,
+            CalibrationTarget::OpponentLoot => self.config.opponent_loot_roi,
+            CalibrationTarget::TroopBar => self.config.troop_bar_roi,
+            CalibrationTarget::BattleControls => self.config.battle_controls_roi,
+        }
+    }
+
+    fn set_selected_region(&mut self, region: Option<PixelRegion>) {
+        match self.calibration_target {
+            CalibrationTarget::StorageHud => self.config.hud_roi = region,
+            CalibrationTarget::OpponentLoot => { self.config.opponent_loot_roi = region; self.config.opponent_loot_roi_calibrated = false; },
+            CalibrationTarget::TroopBar => self.config.troop_bar_roi = region,
+            CalibrationTarget::BattleControls => self.config.battle_controls_roi = region,
         }
     }
 
@@ -107,6 +170,7 @@ impl eframe::App for CocbotApp {
                         self.backend_loot = Some((total, per_hour));
                         self.backend_elapsed = Some(elapsed);
                     }
+                    BackendEvent::StorageUpdated(snapshot) => self.current_storage = Some(snapshot),
                     BackendEvent::Status(message) => self.logs.push(message),
                     BackendEvent::Error(message) => {
                         self.backend_status = format!("Error: {message}");
@@ -137,17 +201,39 @@ impl eframe::App for CocbotApp {
             .resizable(false)
             .default_width(170.0)
             .show(ctx, |ui| {
-                ui.add_space(12.0);
+                ui.add_space(18.0);
+                ui.label(egui::RichText::new("WORKSPACE").small().weak());
+                ui.add_space(6.0);
                 Self::nav(ui, &mut self.page, Page::Overview, "Overview");
                 Self::nav(ui, &mut self.page, Page::Farming, "Farming");
                 Self::nav(ui, &mut self.page, Page::Settings, "Settings");
                 Self::nav(ui, &mut self.page, Page::Logs, "Logs");
+                ui.add_space(18.0);
+                ui.separator();
+                ui.label(egui::RichText::new("COCBOT-RS  •  WINDOWS").small().weak());
             });
 
         egui::CentralPanel::default().show(ctx, |ui| match self.page {
             Page::Overview => {
                 ui.heading("Farming overview");
-                ui.label("Live game capture and HUD OCR status is shown in the Farming page.");
+                ui.label("Live game capture, OCR and farming status.");
+                ui.separator();
+                ui.heading("Current storages");
+                if let Some(storage) = self.current_storage {
+                    ui.horizontal_wrapped(|ui| {
+                        for (label, value, accent) in [
+                            ("GOLD", storage.gold, egui::Color32::from_rgb(242, 190, 75)),
+                            ("ELIXIR", storage.elixir, egui::Color32::from_rgb(210, 95, 225)),
+                            ("DARK ELIXIR", storage.dark_elixir, egui::Color32::from_rgb(150, 110, 210)),
+                        ] {
+                            egui::Frame::group(ui.style()).show(ui, |ui| {
+                                ui.set_min_width(175.0);
+                                ui.label(egui::RichText::new(label).small().weak());
+                                ui.heading(egui::RichText::new(format_amount(value)).size(25.0).color(accent));
+                            });
+                        }
+                    });
+                } else { ui.label("Waiting for OCR readings. Connect to the game to read storage values."); }
                 ui.separator();
                 let summary = self.loot.summary();
                 let (total, per_hour) = self.backend_loot.unwrap_or((summary.total, summary.per_hour));
@@ -208,19 +294,7 @@ impl eframe::App for CocbotApp {
                     ui.end_row();
                 });
                 ui.add_space(10.0);
-                ui.collapsing("Opponent loot OCR region", |ui| {
-                    ui.label("Set a crop around the three opponent resource counters. Values are percentages of the full captured game frame; leave width/height at 0 to keep opponent OCR disabled.");
-                    ui.add(egui::Slider::new(&mut self.config.opponent_loot_x_percent, 0..=100).text("Left (%)"));
-                    ui.add(egui::Slider::new(&mut self.config.opponent_loot_y_percent, 0..=100).text("Top (%)"));
-                    ui.add(egui::Slider::new(&mut self.config.opponent_loot_width_percent, 0..=100).text("Width (%)"));
-                    ui.add(egui::Slider::new(&mut self.config.opponent_loot_height_percent, 0..=100).text("Height (%)"));
-                    let valid = self.config.opponent_loot_width_percent > 0
-                        && self.config.opponent_loot_height_percent > 0
-                        && self.config.opponent_loot_x_percent as u16 + self.config.opponent_loot_width_percent as u16 <= 100
-                        && self.config.opponent_loot_y_percent as u16 + self.config.opponent_loot_height_percent as u16 <= 100;
-                    ui.label(if valid { "Crop configured; compare OCR output with real opponent loot before trusting it." } else { "Crop disabled or outside the frame." });
-                    ui.checkbox(&mut self.config.opponent_loot_roi_calibrated, "I verified this crop against several real opponent screens");
-                });
+                ui.label("Opponent loot OCR coordinates are configured in Settings → Screen area calibration.");
                 ui.checkbox(&mut self.config.template_pack_calibrated, "I verified all required templates against live game screens");
                 ui.label("Save settings and reconnect after changing the crop or calibration confirmations.");
                 ui.collapsing("Target requirements", |ui| {
@@ -315,15 +389,77 @@ impl eframe::App for CocbotApp {
                 }
             }
             Page::Settings => {
+                egui::ScrollArea::vertical().show(ui, |ui| {
                 ui.heading("Settings");
-                ui.label("Tesseract executable path (optional; required for live loot OCR)");
-                ui.text_edit_singleline(&mut self.config.tesseract_path);
-                if ui.button("Save settings").clicked() {
+                ui.heading("Tesseract OCR");
+                ui.horizontal(|ui| {
+                    ui.label("Executable path");
+                    ui.text_edit_singleline(&mut self.config.tesseract_path);
+                    if ui.button("Test connection").clicked() {
+                        let path = if self.config.tesseract_path.trim().is_empty() { "tesseract".to_owned() } else { self.config.tesseract_path.trim().to_owned() };
+                        self.tesseract_status = match OcrEngine::new(path).test_connection() {
+                            Ok(message) => format!("Connected: {message}"),
+                            Err(error) => format!("Failed: {error}"),
+                        };
+                        self.logs.push(self.tesseract_status.clone());
+                    }
+                });
+                ui.label(&self.tesseract_status);
+                ui.separator();
+                ui.heading("Screen area calibration");
+                ui.label("Capture the game, select an area by dragging over the screenshot, then save the settings.");
+                if ui.button("New screenshot").clicked() {
+                    match FarmingBackend::capture_screenshot_now() {
+                        Ok(path) => self.load_screenshot(ctx, path),
+                        Err(error) => self.logs.push(format!("Screenshot capture failed: {error}")),
+                    }
+                }
+                ui.horizontal(|ui| {
+                    ui.label("Area");
+                    egui::ComboBox::from_id_salt("calibration_target")
+                        .selected_text(self.calibration_target.label())
+                        .show_ui(ui, |ui| {
+                            for target in CalibrationTarget::ALL { ui.selectable_value(&mut self.calibration_target, target, target.label()); }
+                        });
+                    if ui.button("Clear selection").clicked() { self.set_selected_region(None); }
+                });
+                if let Some(region) = self.selected_region() {
+                    ui.label(format!("x={}  y={}  width={}  height={}", region.x, region.y, region.width, region.height));
+                } else { ui.label("No saved area for this item."); }
+                if let (Some(texture), Some((width, height))) = (self.screenshot_texture.clone(), self.screenshot_dimensions) {
+                    let available = ui.available_size();
+                    let scale = (available.x / width as f32).min(500.0 / height as f32).min(1.0);
+                    let size = egui::vec2(width as f32 * scale, height as f32 * scale);
+                    let response = ui.add(egui::Image::new((texture.id(), size)).sense(egui::Sense::click_and_drag()));
+                    if response.drag_started() { self.selection_start = response.interact_pointer_pos(); }
+                    if response.drag_stopped()
+                        && let (Some(a), Some(b)) = (self.selection_start.take(), response.interact_pointer_pos())
+                    {
+                        let selection = egui::Rect::from_two_pos(a, b);
+                        if let Some(region) = pixel_region_from_selection(selection, response.rect, width, height) {
+                            self.set_selected_region(Some(region));
+                        }
+                    }
+                    if let Some(region) = self.selected_region()
+                        && region.is_valid_for(width, height)
+                    {
+                        let rect = egui::Rect::from_min_max(
+                            egui::pos2(response.rect.left() + region.x as f32 / width as f32 * response.rect.width(), response.rect.top() + region.y as f32 / height as f32 * response.rect.height()),
+                            egui::pos2(response.rect.left() + (region.x + region.width) as f32 / width as f32 * response.rect.width(), response.rect.top() + (region.y + region.height) as f32 / height as f32 * response.rect.height()),
+                        );
+                        ui.painter().rect_filled(rect, 0.0, egui::Color32::from_rgba_unmultiplied(40, 150, 255, 55));
+                        ui.painter().rect_stroke(rect, 0.0, egui::Stroke::new(2.0_f32, egui::Color32::LIGHT_BLUE), egui::StrokeKind::Inside);
+                    }
+                    ui.label(format!("Screenshot: {width} × {height} pixels"));
+                } else { ui.label("No screenshot loaded. Keep the game visible and press New screenshot."); }
+                ui.separator();
+                if ui.button("Save settings and coordinates").clicked() {
                     match self.config.save() {
-                        Ok(()) => self.logs.push("Settings saved.".into()),
+                        Ok(()) => self.logs.push("Settings and pixel coordinates saved.".into()),
                         Err(error) => self.logs.push(format!("Settings save failed: {error}")),
                     }
                 }
+                });
             }
             Page::Logs => {
                 ui.heading("Logs");
@@ -335,6 +471,42 @@ impl eframe::App for CocbotApp {
             }
         });
     }
+}
+
+fn pixel_region_from_selection(
+    selection: egui::Rect,
+    image_rect: egui::Rect,
+    image_width: u32,
+    image_height: u32,
+) -> Option<PixelRegion> {
+    if image_width == 0 || image_height == 0 || image_rect.width() <= 0.0 || image_rect.height() <= 0.0 {
+        return None;
+    }
+    let clipped = selection.intersect(image_rect);
+    let to_pixel = |point: egui::Pos2| {
+        let x = ((point.x - image_rect.left()) / image_rect.width() * image_width as f32)
+            .round().clamp(0.0, image_width as f32) as u32;
+        let y = ((point.y - image_rect.top()) / image_rect.height() * image_height as f32)
+            .round().clamp(0.0, image_height as f32) as u32;
+        (x, y)
+    };
+    let (x, y) = to_pixel(clipped.min);
+    let (right, bottom) = to_pixel(clipped.max);
+    (right > x && bottom > y).then_some(PixelRegion {
+        x, y, width: right - x, height: bottom - y,
+    })
+}
+
+fn format_amount(value: u64) -> String {
+    let digits = value.to_string();
+    let mut formatted = String::with_capacity(digits.len() + digits.len() / 3);
+    for (index, character) in digits.chars().enumerate() {
+        if index > 0 && (digits.len() - index).is_multiple_of(3) {
+            formatted.push(',');
+        }
+        formatted.push(character);
+    }
+    formatted
 }
 
 fn battle_state_label(state: BattleState) -> &'static str {
@@ -352,5 +524,36 @@ fn battle_state_label(state: BattleState) -> &'static str {
         BattleState::ReturningHome => "Returning home",
         BattleState::ConnectionError => "Connection error — automation must pause",
         BattleState::Unknown => "Unknown — templates required",
+    }
+}
+
+#[cfg(test)]
+mod calibration_ui_tests {
+    use super::*;
+
+    #[test]
+    fn drag_selection_maps_display_coordinates_to_screenshot_pixels() {
+        let image_rect = egui::Rect::from_min_max(egui::pos2(10.0, 20.0), egui::pos2(210.0, 120.0));
+        let selection = egui::Rect::from_min_max(egui::pos2(60.0, 45.0), egui::pos2(110.0, 70.0));
+        assert_eq!(
+            pixel_region_from_selection(selection, image_rect, 800, 400),
+            Some(PixelRegion { x: 200, y: 100, width: 200, height: 100 })
+        );
+    }
+
+    #[test]
+    fn drag_selection_is_clipped_to_the_screenshot() {
+        let image_rect = egui::Rect::from_min_max(egui::pos2(10.0, 20.0), egui::pos2(210.0, 120.0));
+        let selection = egui::Rect::from_min_max(egui::pos2(-20.0, -20.0), egui::pos2(60.0, 70.0));
+        assert_eq!(
+            pixel_region_from_selection(selection, image_rect, 200, 100),
+            Some(PixelRegion { x: 0, y: 0, width: 50, height: 50 })
+        );
+    }
+
+    #[test]
+    fn resource_amounts_are_grouped_for_display() {
+        assert_eq!(format_amount(1234567), "1,234,567");
+        assert_eq!(format_amount(42), "42");
     }
 }

@@ -28,6 +28,7 @@ pub struct BattlePipeline {
     ocr: OcrEngine,
     opponent_loot_region: Option<SearchRegion>,
     troop_templates: Vec<String>,
+    troop_bar_region: Option<SearchRegion>,
 }
 
 impl BattlePipeline {
@@ -45,12 +46,18 @@ impl BattlePipeline {
             ocr,
             opponent_loot_region: Some(opponent_loot_region),
             troop_templates,
+            troop_bar_region: None,
         }
     }
 
     /// Disables opponent-loot OCR until the crop has been calibrated against real screenshots.
     pub fn without_opponent_loot_ocr(mut self) -> Self {
         self.opponent_loot_region = None;
+        self
+    }
+
+    pub fn with_troop_bar_region(mut self, region: Option<SearchRegion>) -> Self {
+        self.troop_bar_region = region;
         self
     }
 
@@ -77,7 +84,7 @@ impl BattlePipeline {
             BattleState::HomeBattle | BattleState::BuilderBattle
         ) {
             let names: Vec<&str> = self.troop_templates.iter().map(String::as_str).collect();
-            self.deployment_recognizer.recognise(frame, &names)?
+            self.deployment_recognizer.recognise_in_region(frame, &names, self.troop_bar_region)?
         } else {
             Vec::new()
         };

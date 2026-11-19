@@ -27,6 +27,7 @@ use std::{
 pub enum BackendEvent {
     Connected { width: u32, height: u32 },
     LootUpdated { total: crate::loot::LootDelta, per_hour: crate::loot::LootDelta, elapsed: Duration },
+    StorageUpdated(crate::loot::ResourceSnapshot),
     BattleUpdated { state: BattleState, confidence: f32 },
     RaidUpdated { phase: RaidPhase, command: String },
     TargetUpdated(String),
@@ -92,6 +93,11 @@ impl FarmingBackend {
                     crate::strategy::ArmyStrategy::BuilderBaseBabyDragon => "baby_dragon.png",
                 };
                 let templates = template_directory(width, height);
+                let troop_bar_roi = config.troop_bar_roi
+                    .filter(|region| region.is_valid_for(width, height))
+                    .map(|region| SearchRegion {
+                        x: region.x, y: region.y, width: region.width, height: region.height,
+                    });
                 let diagnostics = TemplatePackDiagnostics::inspect(&templates, config.strategy);
                 for message in diagnostics.messages() {
                     let _ = events.send(BackendEvent::Status(message));
@@ -141,7 +147,7 @@ impl FarmingBackend {
                 } else {
                     pipeline.without_opponent_loot_ocr()
                 };
-                let pipeline = pipeline.with_stable_samples(2);
+                let pipeline = pipeline.with_troop_bar_region(troop_bar_roi).with_stable_samples(2);
 
                 let policy = TargetPolicy {
                     minimum_gold: config.minimum_gold,
@@ -438,7 +444,7 @@ impl FarmingBackend {
                         }
                     }
 
-                    match read_hud_from_frame(&frame, &ocr) {
+                    match read_hud_from_frame(&frame, &ocr, config.hud_roi) {
                         Ok(Some(snapshot)) => {
                             last_ocr_error = None;
                             if previous_read == Some(snapshot) {
@@ -455,6 +461,7 @@ impl FarmingBackend {
                                     per_hour: summary.per_hour,
                                     elapsed: summary.elapsed,
                                 });
+                                let _ = events.send(BackendEvent::StorageUpdated(snapshot));
                                 stable_count = 0;
                             }
                         }
@@ -494,6 +501,13 @@ impl FarmingBackend {
 
     pub fn stop_farming(&self) -> Result<()> {
         self.commands.send(BackendCommand::StopFarming).map_err(|_| anyhow::anyhow!("Farming worker is not available"))
+    }
+
+    /// Captures and saves a fresh game frame without requiring the farming worker to run.
+    pub fn capture_screenshot_now() -> Result<PathBuf> {
+        let window = GameWindow::find()?;
+        let frame = window.capture()?;
+        save_calibration_screenshot(&frame)
     }
 
     pub fn save_calibration_screenshot(&self) -> Result<()> {
@@ -629,6 +643,13 @@ fn sleep_interruptibly(stop: &AtomicBool, duration: Duration) {
 /// Converts a user-calibrated percentage crop into captured-frame pixels.
 /// A zero-sized crop or coordinates extending beyond the frame disables OCR.
 fn opponent_loot_region(width: u32, height: u32, config: &AppConfig) -> Option<SearchRegion> {
+    if let Some(region) = config.opponent_loot_roi
+        && region.is_valid_for(width, height)
+    {
+        return Some(SearchRegion {
+            x: region.x, y: region.y, width: region.width, height: region.height,
+        });
+    }
     let x = config.opponent_loot_x_percent as u16;
     let y = config.opponent_loot_y_percent as u16;
     let w = config.opponent_loot_width_percent as u16;
@@ -648,7 +669,7 @@ fn opponent_loot_region(width: u32, height: u32, config: &AppConfig) -> Option<S
 
 /// Crops the top-right HUD before OCR. Restricting OCR to this ROI is substantially
 /// faster and more reliable than running recognition over the full game screenshot.
-fn read_hud_from_frame(frame: &DynamicImage, ocr: &OcrEngine) -> Result<Option<ResourceSnapshot>> {
+fn read_hud_from_frame(frame: &DynamicImage, ocr: &OcrEngine, calibrated: Option<crate::config::PixelRegion>) -> Result<Option<ResourceSnapshot>> {
     let (width, height) = (frame.width(), frame.height());
     let is_widescreen = width as f32 / height as f32 > 1.70;
     let (reference_width, reference_height, roi_ref_width, roi_ref_height) = if is_widescreen {
@@ -656,13 +677,16 @@ fn read_hud_from_frame(frame: &DynamicImage, ocr: &OcrEngine) -> Result<Option<R
     } else {
         (2560.0_f32, 1600.0_f32, 600.0_f32, 400.0_f32)
     };
-    let roi_width = ((width as f32 * roi_ref_width / reference_width).round() as u32).min(width);
-    let roi_height = ((height as f32 * roi_ref_height / reference_height).round() as u32).min(height);
-    let left = width.saturating_sub(roi_width);
+    let default_width = ((width as f32 * roi_ref_width / reference_width).round() as u32).min(width);
+    let default_height = ((height as f32 * roi_ref_height / reference_height).round() as u32).min(height);
+    let (left, top, roi_width, roi_height) = match calibrated.filter(|r| r.is_valid_for(width, height)) {
+        Some(region) => (region.x, region.y, region.width, region.height),
+        None => (width.saturating_sub(default_width), 0, default_width, default_height),
+    };
     if roi_width == 0 || roi_height == 0 {
         return Ok(None);
     }
-    let roi = imageops::crop_imm(frame, left, 0, roi_width, roi_height).to_image();
+    let roi = imageops::crop_imm(frame, left, top, roi_width, roi_height).to_image();
     let result = ocr.recognise(&DynamicImage::ImageRgba8(roi), OcrProfile::HudNumbers)?;
     let Some([gold, elixir, dark_elixir]) = OcrEngine::parse_hud_triplet(&result.text) else {
         return Ok(None);
@@ -702,5 +726,40 @@ mod opponent_roi_tests {
             ..AppConfig::default()
         };
         assert!(opponent_loot_region(1920, 1080, &config).is_none());
+    }
+}
+
+
+#[cfg(test)]
+mod calibrated_roi_tests {
+    use super::*;
+    use crate::config::PixelRegion;
+
+    #[test]
+    fn exact_opponent_pixel_region_takes_precedence_over_legacy_percentages() {
+        let config = AppConfig {
+            opponent_loot_x_percent: 10,
+            opponent_loot_y_percent: 20,
+            opponent_loot_width_percent: 30,
+            opponent_loot_height_percent: 15,
+            opponent_loot_roi: Some(PixelRegion { x: 40, y: 60, width: 300, height: 120 }),
+            ..AppConfig::default()
+        };
+        let region = opponent_loot_region(1920, 1080, &config).unwrap();
+        assert_eq!((region.x, region.y, region.width, region.height), (40, 60, 300, 120));
+    }
+
+    #[test]
+    fn invalid_exact_opponent_region_does_not_override_legacy_crop() {
+        let config = AppConfig {
+            opponent_loot_x_percent: 10,
+            opponent_loot_y_percent: 20,
+            opponent_loot_width_percent: 30,
+            opponent_loot_height_percent: 15,
+            opponent_loot_roi: Some(PixelRegion { x: 1900, y: 0, width: 300, height: 120 }),
+            ..AppConfig::default()
+        };
+        let region = opponent_loot_region(1920, 1080, &config).unwrap();
+        assert_eq!((region.x, region.y, region.width, region.height), (192, 216, 576, 162));
     }
 }
