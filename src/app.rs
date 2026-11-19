@@ -432,23 +432,23 @@ impl eframe::App for CocbotApp {
                     let size = egui::vec2(width as f32 * scale, height as f32 * scale);
                     let response = ui.add(egui::Image::new((texture.id(), size)).sense(egui::Sense::click_and_drag()));
                     if response.drag_started() { self.selection_start = response.interact_pointer_pos(); }
-                    if response.drag_stopped() {
-                        if let (Some(a), Some(b)) = (self.selection_start.take(), response.interact_pointer_pos()) {
-                            let selection = egui::Rect::from_two_pos(a, b);
-                            if let Some(region) = pixel_region_from_selection(selection, response.rect, width, height) {
-                                self.set_selected_region(Some(region));
-                            }
+                    if response.drag_stopped()
+                        && let (Some(a), Some(b)) = (self.selection_start.take(), response.interact_pointer_pos())
+                    {
+                        let selection = egui::Rect::from_two_pos(a, b);
+                        if let Some(region) = pixel_region_from_selection(selection, response.rect, width, height) {
+                            self.set_selected_region(Some(region));
                         }
                     }
-                    if let Some(region) = self.selected_region() {
-                        if region.is_valid_for(width, height) {
-                            let rect = egui::Rect::from_min_max(
-                                egui::pos2(response.rect.left() + region.x as f32 / width as f32 * response.rect.width(), response.rect.top() + region.y as f32 / height as f32 * response.rect.height()),
-                                egui::pos2(response.rect.left() + (region.x + region.width) as f32 / width as f32 * response.rect.width(), response.rect.top() + (region.y + region.height) as f32 / height as f32 * response.rect.height()),
-                            );
-                            ui.painter().rect_filled(rect, 0.0, egui::Color32::from_rgba_unmultiplied(40, 150, 255, 55));
-                            ui.painter().rect_stroke(rect, 0.0, egui::Stroke::new(2.0, egui::Color32::LIGHT_BLUE), egui::StrokeKind::Inside);
-                        }
+                    if let Some(region) = self.selected_region()
+                        && region.is_valid_for(width, height)
+                    {
+                        let rect = egui::Rect::from_min_max(
+                            egui::pos2(response.rect.left() + region.x as f32 / width as f32 * response.rect.width(), response.rect.top() + region.y as f32 / height as f32 * response.rect.height()),
+                            egui::pos2(response.rect.left() + (region.x + region.width) as f32 / width as f32 * response.rect.width(), response.rect.top() + (region.y + region.height) as f32 / height as f32 * response.rect.height()),
+                        );
+                        ui.painter().rect_filled(rect, 0.0, egui::Color32::from_rgba_unmultiplied(40, 150, 255, 55));
+                        ui.painter().rect_stroke(rect, 0.0, egui::Stroke::new(2.0_f32, egui::Color32::LIGHT_BLUE), egui::StrokeKind::Inside);
                     }
                     ui.label(format!("Screenshot: {width} × {height} pixels"));
                 } else { ui.label("No screenshot loaded. Keep the game visible and press New screenshot."); }
@@ -501,7 +501,7 @@ fn format_amount(value: u64) -> String {
     let digits = value.to_string();
     let mut formatted = String::with_capacity(digits.len() + digits.len() / 3);
     for (index, character) in digits.chars().enumerate() {
-        if index > 0 && (digits.len() - index) % 3 == 0 {
+        if index > 0 && (digits.len() - index).is_multiple_of(3) {
             formatted.push(',');
         }
         formatted.push(character);
