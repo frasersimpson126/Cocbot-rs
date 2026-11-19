@@ -518,6 +518,14 @@ impl Drop for FarmingBackend {
 fn save_calibration_screenshot(frame: &DynamicImage) -> Result<PathBuf> {
     let directory = AppConfig::calibration_dir()?;
     fs::create_dir_all(&directory)?;
+    let data_directory = directory.parent()
+        .context("Could not resolve local application data directory")?;
+    let aspect_directory = if frame.width() as f32 / frame.height().max(1) as f32 > 1.70 {
+        "16_9"
+    } else {
+        "16_10"
+    };
+    fs::create_dir_all(data_directory.join("assets").join("templates").join(aspect_directory))?;
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis();
     let path = directory.join(format!("game-capture-{timestamp}.png"));
     frame.save(&path)?;
