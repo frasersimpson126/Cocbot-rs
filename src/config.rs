@@ -83,6 +83,12 @@ impl AppConfig {
         toml::from_str(&raw).context("Invalid config.toml")
     }
 
+    pub fn calibration_dir() -> Result<PathBuf> {
+        let dirs = ProjectDirs::from("uk", "FraserSimpson", "Cocbot-rs")
+            .context("Could not resolve application data directory")?;
+        Ok(dirs.data_local_dir().join("calibration"))
+    }
+
     pub fn save(&self) -> Result<()> {
         let path = Self::path()?;
         if let Some(parent) = path.parent() {
