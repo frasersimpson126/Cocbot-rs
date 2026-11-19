@@ -9,7 +9,7 @@ A Rust desktop rewrite of [BasePilot](https://github.com/efebolukbasi/BasePilot)
 - Home Village farming and attack strategies from the original project.
 - Builder Base farming using supported strategies.
 - Loot tracking for gold, elixir, and dark elixir, including session totals and hourly rates.
-- A desktop interface for farming configuration, status, and logs.
+- A desktop interface for farming configuration, target loot thresholds, status, and logs.
 - Continuous farming until manually stopped; no session timer.
 
 ## Explicitly out of scope
@@ -65,6 +65,10 @@ See [assets/templates/README.md](assets/templates/README.md) for the complete fi
 manifest and calibration guidance. Startup validation is a file-integrity check, not
 proof that a template matches live gameplay; calibrate thresholds on representative
 screenshots before any input execution is enabled.
+
+## Target selection settings
+
+The Farming page exposes persisted target requirements: minimum gold, elixir and dark elixir, minimum weighted loot score, and minimum OCR confidence. All three resource minimums are hard gates; loot priority controls the weighted score after those gates pass. Older config files automatically receive the defaults (300,000 gold, 300,000 elixir, 2,000 dark elixir, 45% score, 85% OCR confidence). Changes are passed to the raid evaluator when the monitoring backend starts; reconnect after changing settings to apply them to an active worker.
 
 ## OCR performance
 
