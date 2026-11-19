@@ -94,13 +94,20 @@ impl FarmingBackend {
                 for message in diagnostics.messages() {
                     let _ = events.send(BackendEvent::Status(message));
                 }
-                let can_start = diagnostics.is_ready() && opponent_roi.is_some();
+                let can_start = diagnostics.is_ready()
+                    && opponent_roi.is_some()
+                    && config.template_pack_calibrated
+                    && config.opponent_loot_roi_calibrated;
                 let readiness_reason = if !diagnostics.is_ready() {
                     "Required screen or selected troop templates are missing/invalid.".to_owned()
                 } else if opponent_roi.is_none() {
                     "Configure a valid opponent-loot OCR crop before starting.".to_owned()
+                } else if !config.template_pack_calibrated {
+                    "Confirm that every required screen/troop template has been checked against live game screens.".to_owned()
+                } else if !config.opponent_loot_roi_calibrated {
+                    "Confirm that opponent-loot OCR matches real values across multiple opponent screens.".to_owned()
                 } else {
-                    "Required templates and opponent-loot crop are configured; verify them against live gameplay.".to_owned()
+                    "Template pack and opponent-loot OCR calibration have been confirmed.".to_owned()
                 };
                 let _ = events.send(BackendEvent::Ready { can_start, reason: readiness_reason.clone() });
                 if !diagnostics.is_ready() {
