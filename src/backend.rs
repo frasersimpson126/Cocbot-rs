@@ -285,17 +285,17 @@ impl FarmingBackend {
 
                             if let Some(input_device) = input.as_mut()
                                 && automation.phase() != RaidPhase::Idle
-                                && !matches!(command,
-                                    crate::raid::RaidCommand::None
-                                    | crate::raid::RaidCommand::WaitForStableFrame
-                                    | crate::raid::RaidCommand::RaidFinished)
+                                && !matches!(&command,
+                                    &crate::raid::RaidCommand::None
+                                    | &crate::raid::RaidCommand::WaitForStableFrame
+                                    | &crate::raid::RaidCommand::RaidFinished)
                             {
                                 if let Err(error) = execute_raid_command(
                                     &window, input_device, &frame, config.village, state, &command,
                                     &navigation, &return_home, &deployment, &mut automation,
                                 ) {
                                     let _ = events.send(BackendEvent::Error(format!("Action refused or failed: {error}")));
-                                    if matches!(command, crate::raid::RaidCommand::Deploy(_)) {
+                                    if matches!(&command, crate::raid::RaidCommand::Deploy(_)) {
                                         automation.stop();
                                         let _ = events.send(BackendEvent::Status("Deployment failed after input may have started; farming stopped to prevent duplicate troop deployment.".into()));
                                     } else {
