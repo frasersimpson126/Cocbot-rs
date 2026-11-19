@@ -137,9 +137,6 @@ impl RaidCoordinator {
                 self.phase = RaidPhase::AwaitingReturn;
                 RaidCommand::ReturnToVillage
             }
-            (RaidPhase::AwaitingReturn, BattleState::BattleWon | BattleState::BattleLost) => {
-                RaidCommand::ReturnToVillage
-            }
             (RaidPhase::AwaitingReturn, BattleState::HomeVillage)
                 if self.village == Village::Home =>
             {
@@ -436,7 +433,6 @@ mod tests {
         assert_eq!(raid.phase(), RaidPhase::DeploymentPrepared);
         raid.confirm_deployment_started(BattleState::HomeBattle).unwrap();
         assert_eq!(raid.phase(), RaidPhase::InBattle);
-        assert_eq!(raid.observe_state(BattleState::BattleWon), RaidCommand::ReturnToVillage);
         assert_eq!(raid.observe_state(BattleState::BattleWon), RaidCommand::ReturnToVillage);
         assert_eq!(raid.observe_state(BattleState::HomeVillage), RaidCommand::OpenAttackMenu);
     }
