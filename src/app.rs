@@ -285,10 +285,10 @@ impl eframe::App for CocbotApp {
                     ui.add(egui::Slider::new(&mut self.config.opponent_loot_y_percent, 0..=100).text("Top (%)"));
                     ui.add(egui::Slider::new(&mut self.config.opponent_loot_width_percent, 0..=100).text("Width (%)"));
                     ui.add(egui::Slider::new(&mut self.config.opponent_loot_height_percent, 0..=100).text("Height (%)"));
-                    let valid = self.config.opponent_loot_width_percent > 0
+                    let valid = self.config.opponent_loot_roi.is_some() || (self.config.opponent_loot_width_percent > 0
                         && self.config.opponent_loot_height_percent > 0
                         && self.config.opponent_loot_x_percent as u16 + self.config.opponent_loot_width_percent as u16 <= 100
-                        && self.config.opponent_loot_y_percent as u16 + self.config.opponent_loot_height_percent as u16 <= 100;
+                        && self.config.opponent_loot_y_percent as u16 + self.config.opponent_loot_height_percent as u16 <= 100);
                     ui.label(if valid { "Crop configured; compare OCR output with real opponent loot before trusting it." } else { "Crop disabled or outside the frame." });
                     ui.checkbox(&mut self.config.opponent_loot_roi_calibrated, "I verified this crop against several real opponent screens");
                 });
