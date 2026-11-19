@@ -222,6 +222,7 @@ impl eframe::App for CocbotApp {
                     ui.checkbox(&mut self.config.opponent_loot_roi_calibrated, "I verified this crop against several real opponent screens");
                 });
                 ui.checkbox(&mut self.config.template_pack_calibrated, "I verified all required templates against live game screens");
+                ui.label("Save settings and reconnect after changing the crop or calibration confirmations.");
                 ui.collapsing("Target requirements", |ui| {
                     ui.label("A target must meet all three resource minimums and the weighted score/confidence thresholds.");
                     ui.add(egui::Slider::new(&mut self.config.minimum_gold, 100_000..=2_000_000)
