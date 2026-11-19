@@ -219,7 +219,9 @@ impl eframe::App for CocbotApp {
                         && self.config.opponent_loot_x_percent as u16 + self.config.opponent_loot_width_percent as u16 <= 100
                         && self.config.opponent_loot_y_percent as u16 + self.config.opponent_loot_height_percent as u16 <= 100;
                     ui.label(if valid { "Crop configured; compare OCR output with real opponent loot before trusting it." } else { "Crop disabled or outside the frame." });
+                    ui.checkbox(&mut self.config.opponent_loot_roi_calibrated, "I verified this crop against several real opponent screens");
                 });
+                ui.checkbox(&mut self.config.template_pack_calibrated, "I verified all required templates against live game screens");
                 ui.collapsing("Target requirements", |ui| {
                     ui.label("A target must meet all three resource minimums and the weighted score/confidence thresholds.");
                     ui.add(egui::Slider::new(&mut self.config.minimum_gold, 100_000..=2_000_000)
