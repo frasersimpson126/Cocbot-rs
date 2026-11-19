@@ -44,13 +44,13 @@ src/
 At startup the backend inspects the selected strategy's aspect-ratio template directory
 and reports every required and optional recognition group in the Farming log. Required
 groups include village entry, Find Now, matchmaking, opponent-found, battle HUD,
-separate victory and defeat markers, return-home, next-opponent, and the selected army troop icon.
+separate victory and defeat markers, return-home, next-opponent, connection-error, and the selected army troop icon.
 A group is considered available only when at least one alternative decodes successfully.
 
 Every supplied image is decoded during validation. Empty files, corrupt images, files
 larger than 16 MiB, and images outside the supported 8×8 to 2048×2048 dimensions are
 reported as invalid. Missing or invalid assets never count as a match and do not silently
-lower recognition thresholds. Optional groups (hero ability, siege machine and spell icons) are reported separately.
+lower recognition thresholds. Optional groups (battle-ending/return transitions, hero ability, siege machine and spell icons) are reported separately.
 
 Install the assets in the directory matching the captured window aspect ratio:
 
