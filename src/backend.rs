@@ -311,3 +311,38 @@ fn read_hud_from_frame(frame: &DynamicImage, ocr: &OcrEngine) -> Result<Option<R
     };
     Ok(Some(ResourceSnapshot { gold, elixir, dark_elixir }))
 }
+
+#[cfg(test)]
+mod opponent_roi_tests {
+    use super::*;
+
+    #[test]
+    fn opponent_crop_scales_from_percentages_to_frame_pixels() {
+        let config = AppConfig {
+            opponent_loot_x_percent: 10,
+            opponent_loot_y_percent: 20,
+            opponent_loot_width_percent: 30,
+            opponent_loot_height_percent: 15,
+            ..AppConfig::default()
+        };
+        let region = opponent_loot_region(1920, 1080, &config).unwrap();
+        assert_eq!((region.x, region.y, region.width, region.height), (192, 216, 576, 162));
+    }
+
+    #[test]
+    fn opponent_crop_is_disabled_until_a_nonzero_valid_size_is_set() {
+        let config = AppConfig::default();
+        assert!(opponent_loot_region(1920, 1080, &config).is_none());
+    }
+
+    #[test]
+    fn opponent_crop_outside_frame_is_rejected() {
+        let config = AppConfig {
+            opponent_loot_x_percent: 90,
+            opponent_loot_width_percent: 20,
+            opponent_loot_height_percent: 10,
+            ..AppConfig::default()
+        };
+        assert!(opponent_loot_region(1920, 1080, &config).is_none());
+    }
+}
