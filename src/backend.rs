@@ -160,6 +160,7 @@ impl FarmingBackend {
                 let mut stable_count = 0_u8;
                 let mut last_ocr_error: Option<String> = None;
                 let mut last_capture_error: Option<String> = None;
+                let mut resize_warning_active = false;
                 let mut last_battle_state: Option<BattleState> = None;
                 let mut last_raid_status: Option<(RaidPhase, String)> = None;
                 let mut last_target_status: Option<String> = None;
@@ -205,14 +206,15 @@ impl FarmingBackend {
                             "Game window resized from {width}x{height} to {}x{}; farming paused until monitoring is restarted and the ROI is recalibrated.",
                             frame.width(), frame.height()
                         );
-                        if last_capture_error.as_deref() != Some(message.as_str()) {
-                            let _ = events.send(BackendEvent::Status(message.clone()));
-                            last_capture_error = Some(message);
+                        if !resize_warning_active {
+                            let _ = events.send(BackendEvent::Status(message));
+                            resize_warning_active = true;
                         }
                         automation.pause();
                         sleep_interruptibly(&worker_stop, Duration::from_millis(250));
                         continue;
                     }
+                    resize_warning_active = false;
 
                     match automation.process_frame(&frame, Viewport { width, height }) {
                         Ok(analysis) => {
