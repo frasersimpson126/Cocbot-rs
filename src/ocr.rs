@@ -50,10 +50,7 @@ impl OcrEngine {
 
     /// Checks the configured executable once at startup, before farming can be enabled.
     pub fn is_available(&self) -> bool {
-        Command::new(&self.executable)
-            .arg("--version")
-            .output()
-            .is_ok_and(|output| output.status.success())
+        self.test_connection().is_ok()
     }
 
     /// Verifies the configured executable, reports its version, and confirms English data is installed.
@@ -63,7 +60,7 @@ impl OcrEngine {
         if !version.status.success() {
             bail!("Tesseract --version failed: {}", String::from_utf8_lossy(&version.stderr).trim());
         }
-        let version_text = String::from_utf8_lossy(&version.stdout).trim().to_owned();
+        let version_text = if version.stdout.is_empty() { String::from_utf8_lossy(&version.stderr).trim().to_owned() } else { String::from_utf8_lossy(&version.stdout).trim().to_owned() };
         let languages = Command::new(&self.executable).arg("--list-langs").output()
             .context("Tesseract launched, but its language data could not be queried")?;
         if !languages.status.success() {
