@@ -469,4 +469,42 @@ mod tests {
         );
         assert!(matches!(result, Err(RaidError::WrongVillageStrategy)));
     }
+    #[test]
+    fn pausing_idle_does_not_block_a_later_start() {
+        let mut raid = coordinator();
+        raid.pause();
+        assert_eq!(raid.phase(), RaidPhase::Idle);
+        assert_eq!(raid.start(BattleState::HomeVillage), Ok(RaidCommand::OpenAttackMenu));
+    }
+
+    #[test]
+    fn duplicate_start_is_rejected_until_the_session_is_stopped() {
+        let mut raid = coordinator();
+        raid.start(BattleState::HomeVillage).unwrap();
+        assert_eq!(raid.start(BattleState::HomeVillage), Err(RaidError::UnexpectedState));
+        raid.stop();
+        assert_eq!(raid.start(BattleState::HomeVillage), Ok(RaidCommand::OpenAttackMenu));
+    }
+
+    #[test]
+    fn resuming_after_a_battle_result_returns_to_village() {
+        let mut raid = coordinator();
+        raid.start(BattleState::HomeVillage).unwrap();
+        raid.observe_state(BattleState::OpponentFound);
+        raid.evaluate_opponent(good_target());
+        let slot = TroopSlot {
+            name: "sneaky_goblin".into(),
+            bounds: TemplateMatch { x: 10, y: 10, width: 30, height: 30, confidence: 0.99 },
+        };
+        raid.prepare_deployment(
+            BattleState::HomeBattle,
+            Viewport { width: 1280, height: 720 },
+            &[slot],
+        ).unwrap();
+        raid.confirm_deployment_started(BattleState::HomeBattle).unwrap();
+        raid.pause();
+        assert_eq!(raid.resume(BattleState::BattleWon), RaidCommand::ReturnToVillage);
+        assert_eq!(raid.phase(), RaidPhase::AwaitingReturn);
+    }
+
 }
