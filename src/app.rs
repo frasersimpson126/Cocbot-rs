@@ -90,7 +90,9 @@ impl CocbotApp {
     }
 
     fn nav(ui: &mut egui::Ui, current: &mut Page, page: Page, label: &str) {
-        if ui.selectable_label(*current == page, label).clicked() {
+        let active = *current == page;
+        let fill = if active { egui::Color32::from_rgb(49, 91, 145) } else { egui::Color32::from_rgb(32, 40, 54) };
+        if ui.add_sized([ui.available_width(), 46.0], egui::Button::new(label).fill(fill)).clicked() {
             *current = page;
         }
     }
@@ -199,11 +201,16 @@ impl eframe::App for CocbotApp {
             .resizable(false)
             .default_width(170.0)
             .show(ctx, |ui| {
-                ui.add_space(12.0);
+                ui.add_space(18.0);
+                ui.label(egui::RichText::new("WORKSPACE").small().weak());
+                ui.add_space(6.0);
                 Self::nav(ui, &mut self.page, Page::Overview, "Overview");
                 Self::nav(ui, &mut self.page, Page::Farming, "Farming");
                 Self::nav(ui, &mut self.page, Page::Settings, "Settings");
                 Self::nav(ui, &mut self.page, Page::Logs, "Logs");
+                ui.add_space(18.0);
+                ui.separator();
+                ui.label(egui::RichText::new("COCBOT-RS  •  WINDOWS").small().weak());
             });
 
         egui::CentralPanel::default().show(ctx, |ui| match self.page {
