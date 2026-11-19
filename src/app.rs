@@ -23,7 +23,7 @@ impl CalibrationTarget {
     const ALL: [Self; 4] = [Self::StorageHud, Self::OpponentLoot, Self::TroopBar, Self::BattleControls];
     fn label(self) -> &'static str { match self {
         Self::StorageHud => "Home storage HUD", Self::OpponentLoot => "Opponent loot counters",
-        Self::TroopBar => "Troop deployment bar", Self::BattleControls => "Battle controls",
+        Self::TroopBar => "Troop deployment bar", Self::BattleControls => "Battle controls (reference)",
     }}
 }
 
