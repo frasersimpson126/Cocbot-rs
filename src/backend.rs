@@ -189,9 +189,8 @@ impl FarmingBackend {
                                 last_battle_state = Some(state);
                             }
 
-                            // The coordinator is live, but commands are only surfaced to
-                            // the UI. No mouse input is sent until templates and coordinates
-                            // have been validated against real game screenshots.
+                            // Commands are executed below only after explicit Start and only
+                            // while startup asset checks permit farming input.
                             let command = format!("{:?}", analysis.command);
                             let status = (automation.phase(), command);
                             if last_raid_status.as_ref() != Some(&status) {
