@@ -83,7 +83,8 @@ The calibration page keeps the locations together:
 
 - **Home storage HUD** — used by the live storage OCR instead of the built-in top-right fallback crop.
 - **Opponent loot counters** — used by the opponent loot OCR pipeline and required before target-based farming can start.
-- **Troop deployment bar** and **Battle controls** — saved as additional calibration references for later detector work.
+- **Troop deployment bar** — used by troop-icon recognition instead of its default lower-screen search band.
+- **Battle controls** — saved as a reference crop for future navigation-template calibration; current navigation matching still uses its existing validated search regions.
 
 Press **Save settings and coordinates** to persist the selected regions in the normal TOML config under the application's local configuration directory. A new screenshot does not discard the saved coordinates; select an area again to replace it. If the game window resolution changes, take a new screenshot and recalibrate because these are pixel coordinates.
 
