@@ -387,11 +387,73 @@ impl eframe::App for CocbotApp {
             }
             Page::Settings => {
                 ui.heading("Settings");
-                ui.label("Tesseract executable path (optional; required for live loot OCR)");
-                ui.text_edit_singleline(&mut self.config.tesseract_path);
-                if ui.button("Save settings").clicked() {
+                ui.heading("Tesseract OCR");
+                ui.horizontal(|ui| {
+                    ui.label("Executable path");
+                    ui.text_edit_singleline(&mut self.config.tesseract_path);
+                    if ui.button("Test connection").clicked() {
+                        let path = if self.config.tesseract_path.trim().is_empty() { "tesseract".to_owned() } else { self.config.tesseract_path.trim().to_owned() };
+                        self.tesseract_status = match OcrEngine::new(path).test_connection() {
+                            Ok(message) => format!("Connected: {message}"),
+                            Err(error) => format!("Failed: {error}"),
+                        };
+                        self.logs.push(self.tesseract_status.clone());
+                    }
+                });
+                ui.label(&self.tesseract_status);
+                ui.separator();
+                ui.heading("Screen area calibration");
+                ui.label("Capture the game, select an area by dragging over the screenshot, then save the settings.");
+                if ui.button("New screenshot").clicked() {
+                    match FarmingBackend::capture_screenshot_now() {
+                        Ok(path) => self.load_screenshot(ctx, path),
+                        Err(error) => self.logs.push(format!("Screenshot capture failed: {error}")),
+                    }
+                }
+                ui.horizontal(|ui| {
+                    ui.label("Area");
+                    egui::ComboBox::from_id_salt("calibration_target")
+                        .selected_text(self.calibration_target.label())
+                        .show_ui(ui, |ui| {
+                            for target in CalibrationTarget::ALL { ui.selectable_value(&mut self.calibration_target, target, target.label()); }
+                        });
+                    if ui.button("Clear selection").clicked() { self.set_selected_region(None); }
+                });
+                if let Some(region) = self.selected_region() {
+                    ui.label(format!("x={}  y={}  width={}  height={}", region.x, region.y, region.width, region.height));
+                } else { ui.label("No saved area for this item."); }
+                if let (Some(texture), Some((width, height))) = (&self.screenshot_texture, self.screenshot_dimensions) {
+                    let available = ui.available_size();
+                    let scale = (available.x / width as f32).min(500.0 / height as f32).min(1.0);
+                    let size = egui::vec2(width as f32 * scale, height as f32 * scale);
+                    let response = ui.add(egui::Image::new((texture.id(), size)).sense(egui::Sense::click_and_drag()));
+                    if response.drag_started() { self.selection_start = response.interact_pointer_pos(); }
+                    if response.drag_stopped() {
+                        if let (Some(a), Some(b)) = (self.selection_start.take(), response.interact_pointer_pos()) {
+                            let rect = egui::Rect::from_two_pos(a, b).intersect(response.rect);
+                            let x = ((rect.left() - response.rect.left()) / response.rect.width() * width as f32).round().clamp(0.0, width as f32) as u32;
+                            let y = ((rect.top() - response.rect.top()) / response.rect.height() * height as f32).round().clamp(0.0, height as f32) as u32;
+                            let right = ((rect.right() - response.rect.left()) / response.rect.width() * width as f32).round().clamp(0.0, width as f32) as u32;
+                            let bottom = ((rect.bottom() - response.rect.top()) / response.rect.height() * height as f32).round().clamp(0.0, height as f32) as u32;
+                            if right > x && bottom > y { self.set_selected_region(Some(PixelRegion { x, y, width: right - x, height: bottom - y })); }
+                        }
+                    }
+                    if let Some(region) = self.selected_region() {
+                        if region.is_valid_for(width, height) {
+                            let rect = egui::Rect::from_min_max(
+                                egui::pos2(response.rect.left() + region.x as f32 / width as f32 * response.rect.width(), response.rect.top() + region.y as f32 / height as f32 * response.rect.height()),
+                                egui::pos2(response.rect.left() + (region.x + region.width) as f32 / width as f32 * response.rect.width(), response.rect.top() + (region.y + region.height) as f32 / height as f32 * response.rect.height()),
+                            );
+                            ui.painter().rect_filled(rect, 0.0, egui::Color32::from_rgba_unmultiplied(40, 150, 255, 55));
+                            ui.painter().rect_stroke(rect, 0.0, egui::Stroke::new(2.0, egui::Color32::LIGHT_BLUE), egui::StrokeKind::Inside);
+                        }
+                    }
+                    ui.label(format!("Screenshot: {width} × {height} pixels"));
+                } else { ui.label("No screenshot loaded. Keep the game visible and press New screenshot."); }
+                ui.separator();
+                if ui.button("Save settings and coordinates").clicked() {
                     match self.config.save() {
-                        Ok(()) => self.logs.push("Settings saved.".into()),
+                        Ok(()) => self.logs.push("Settings and pixel coordinates saved.".into()),
                         Err(error) => self.logs.push(format!("Settings save failed: {error}")),
                     }
                 }
