@@ -33,6 +33,11 @@ pub struct AppConfig {
     pub minimum_dark_elixir: u64,
     pub minimum_score_percent: u8,
     pub minimum_confidence_percent: u8,
+    /// Opponent loot crop as percentages of the captured frame; zero size disables it.
+    pub opponent_loot_x_percent: u8,
+    pub opponent_loot_y_percent: u8,
+    pub opponent_loot_width_percent: u8,
+    pub opponent_loot_height_percent: u8,
     pub tesseract_path: String,
 }
 
@@ -47,6 +52,10 @@ impl Default for AppConfig {
             minimum_dark_elixir: 2_000,
             minimum_score_percent: 45,
             minimum_confidence_percent: 85,
+            opponent_loot_x_percent: 0,
+            opponent_loot_y_percent: 0,
+            opponent_loot_width_percent: 0,
+            opponent_loot_height_percent: 0,
             tesseract_path: String::new(),
         }
     }
