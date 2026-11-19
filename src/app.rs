@@ -434,12 +434,10 @@ impl eframe::App for CocbotApp {
                     if response.drag_started() { self.selection_start = response.interact_pointer_pos(); }
                     if response.drag_stopped() {
                         if let (Some(a), Some(b)) = (self.selection_start.take(), response.interact_pointer_pos()) {
-                            let rect = egui::Rect::from_two_pos(a, b).intersect(response.rect);
-                            let x = ((rect.left() - response.rect.left()) / response.rect.width() * width as f32).round().clamp(0.0, width as f32) as u32;
-                            let y = ((rect.top() - response.rect.top()) / response.rect.height() * height as f32).round().clamp(0.0, height as f32) as u32;
-                            let right = ((rect.right() - response.rect.left()) / response.rect.width() * width as f32).round().clamp(0.0, width as f32) as u32;
-                            let bottom = ((rect.bottom() - response.rect.top()) / response.rect.height() * height as f32).round().clamp(0.0, height as f32) as u32;
-                            if right > x && bottom > y { self.set_selected_region(Some(PixelRegion { x, y, width: right - x, height: bottom - y })); }
+                            let selection = egui::Rect::from_two_pos(a, b);
+                            if let Some(region) = pixel_region_from_selection(selection, response.rect, width, height) {
+                                self.set_selected_region(Some(region));
+                            }
                         }
                     }
                     if let Some(region) = self.selected_region() {
@@ -475,6 +473,30 @@ impl eframe::App for CocbotApp {
     }
 }
 
+fn pixel_region_from_selection(
+    selection: egui::Rect,
+    image_rect: egui::Rect,
+    image_width: u32,
+    image_height: u32,
+) -> Option<PixelRegion> {
+    if image_width == 0 || image_height == 0 || image_rect.width() <= 0.0 || image_rect.height() <= 0.0 {
+        return None;
+    }
+    let clipped = selection.intersect(image_rect);
+    let to_pixel = |point: egui::Pos2| {
+        let x = ((point.x - image_rect.left()) / image_rect.width() * image_width as f32)
+            .round().clamp(0.0, image_width as f32) as u32;
+        let y = ((point.y - image_rect.top()) / image_rect.height() * image_height as f32)
+            .round().clamp(0.0, image_height as f32) as u32;
+        (x, y)
+    };
+    let (x, y) = to_pixel(clipped.min);
+    let (right, bottom) = to_pixel(clipped.max);
+    (right > x && bottom > y).then_some(PixelRegion {
+        x, y, width: right - x, height: bottom - y,
+    })
+}
+
 fn format_amount(value: u64) -> String {
     let digits = value.to_string();
     let mut formatted = String::with_capacity(digits.len() + digits.len() / 3);
@@ -502,5 +524,36 @@ fn battle_state_label(state: BattleState) -> &'static str {
         BattleState::ReturningHome => "Returning home",
         BattleState::ConnectionError => "Connection error — automation must pause",
         BattleState::Unknown => "Unknown — templates required",
+    }
+}
+
+#[cfg(test)]
+mod calibration_ui_tests {
+    use super::*;
+
+    #[test]
+    fn drag_selection_maps_display_coordinates_to_screenshot_pixels() {
+        let image_rect = egui::Rect::from_min_max(egui::pos2(10.0, 20.0), egui::pos2(210.0, 120.0));
+        let selection = egui::Rect::from_min_max(egui::pos2(60.0, 45.0), egui::pos2(110.0, 70.0));
+        assert_eq!(
+            pixel_region_from_selection(selection, image_rect, 800, 400),
+            Some(PixelRegion { x: 200, y: 100, width: 200, height: 100 })
+        );
+    }
+
+    #[test]
+    fn drag_selection_is_clipped_to_the_screenshot() {
+        let image_rect = egui::Rect::from_min_max(egui::pos2(10.0, 20.0), egui::pos2(210.0, 120.0));
+        let selection = egui::Rect::from_min_max(egui::pos2(-20.0, -20.0), egui::pos2(60.0, 70.0));
+        assert_eq!(
+            pixel_region_from_selection(selection, image_rect, 200, 100),
+            Some(PixelRegion { x: 0, y: 0, width: 50, height: 50 })
+        );
+    }
+
+    #[test]
+    fn resource_amounts_are_grouped_for_display() {
+        assert_eq!(format_amount(1234567), "1,234,567");
+        assert_eq!(format_amount(42), "42");
     }
 }
