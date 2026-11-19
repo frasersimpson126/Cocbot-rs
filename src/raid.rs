@@ -115,6 +115,7 @@ impl RaidCoordinator {
             }
             (RaidPhase::StartingMatchmaking, _) => RaidCommand::WaitForStableFrame,
             (RaidPhase::Searching, BattleState::Matchmaking) => RaidCommand::WaitForStableFrame,
+            (RaidPhase::SkippingOpponent, BattleState::OpponentFound) => RaidCommand::SkipOpponent,
             (RaidPhase::SkippingOpponent, _) => RaidCommand::WaitForStableFrame,
             (RaidPhase::DeploymentPrepared, _) => RaidCommand::WaitForStableFrame,
             (RaidPhase::Searching, BattleState::OpponentFound) => {
