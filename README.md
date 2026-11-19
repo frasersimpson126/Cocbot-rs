@@ -89,7 +89,7 @@ Press **Save settings and coordinates** to persist the selected regions in the n
 
 The Settings page also includes **Test connection** for Tesseract. It checks that the configured executable starts, reports its version, and confirms that English (eng) language data is installed. The Overview page shows the latest stable gold, elixir, and dark-elixir storage readings.
 
-Release builds use the Windows GUI subsystem, so launching cocbot-rs.exe does not open a console window. CI checks formatting, tests, Clippy, and the Windows release build. A tagged v* release workflow publishes the executable as a downloadable GitHub Actions artifact.
+Release builds use the Windows GUI subsystem, so launching cocbot-rs.exe does not open a console window. The existing Windows CI workflow runs unit tests, Clippy, and a release build. A tagged v* release workflow publishes the executable as a downloadable GitHub Actions artifact.
 
 ## OCR performance
 
