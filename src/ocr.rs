@@ -48,6 +48,14 @@ impl OcrEngine {
         &self.executable
     }
 
+    /// Checks the configured executable once at startup, before farming can be enabled.
+    pub fn is_available(&self) -> bool {
+        Command::new(&self.executable)
+            .arg("--version")
+            .output()
+            .is_ok_and(|output| output.status.success())
+    }
+
     /// Runs Tesseract over an in-memory image. The image is streamed through stdin,
     /// avoiding per-frame temporary files and filesystem contention.
     pub fn recognise(&self, image: &DynamicImage, profile: OcrProfile) -> Result<OcrResult> {

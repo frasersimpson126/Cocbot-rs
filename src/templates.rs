@@ -144,7 +144,9 @@ pub fn required_groups(strategy: ArmyStrategy) -> Vec<TemplateGroup> {
             group("return home", &["returnhome.png"], true)
         },
         group("selected army troop", &[troop], true),
-        group("next opponent", &["next.png", "bbnext.png"], false),
+        group("next opponent", &["next.png", "bbnext.png"], true),
+        group("attack opponent", &["attacknow.png", "attack_now.png", "attackbutton.png", "bbattacknow.png"], true),
+        group("connection error", &["connectionerror.png", "connection_error.png"], true),
         group("hero ability", &["king_ability.png", "queen_ability.png", "warden_ability.png", "champion_ability.png"], false),
         group("siege machine", &["siege_machine.png"], false),
         group("spell icons", &["spell.png", "earthquake_spell.png"], false),
@@ -190,5 +192,19 @@ fn validate_asset(directory: &Path, file: &str) -> TemplateAssetDiagnostic {
             }
         }
         Err(error) => TemplateAssetDiagnostic { file: file.to_owned(), valid: false, message: format!("image decode failed: {error}") },
+    }
+}
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn farming_requires_next_opponent_and_connection_error_templates() {
+        let groups = required_groups(ArmyStrategy::SneakyGoblin);
+        for required_name in ["next opponent", "attack opponent", "connection error"] {
+            assert!(groups.iter().any(|group| group.name == required_name && group.required));
+        }
     }
 }

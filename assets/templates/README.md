@@ -31,7 +31,8 @@ The detector also recognises these optional transition overlays when present:
 - `bbbattleending.png` — Builder Base battle ending transition
 - `returninghome.png` — Home Village return transition
 - `bbreturninghome.png` — Builder Base return transition
-- `connectionerror.png` or `connection_error.png` — connection/lost-session overlay
+
+The connection/lost-session overlay (`connectionerror.png` or `connection_error.png`) is required before farming can start, so a recognised disconnect pauses the active raid until explicit user resume.
 
 A stable connection-error detection pauses the raid coordinator. The bot must not
 resume automatically when the overlay disappears; recovery requires an explicit
@@ -65,12 +66,15 @@ recognition group in the Farming log. Required groups are:
 - Battle HUD: `endbattle.png` or `bbendbattle.png`
 - Victory and defeat: `bstar.png` / `bbstar.png`, and `defeat.png` / `bbdefeat.png`
 - Return: `returnhome.png` or `bbreturnhome.png`
+- The next-opponent button (`next.png` or `bbnext.png`)
+- The opponent-screen Attack button (`attacknow.png`, `attack_now.png`, `attackbutton.png` or `bbattacknow.png`)
+- A connection-error overlay (`connectionerror.png` or `connection_error.png`)
 - The selected strategy's troop icon
 
 Each required logical group must have at least one valid alternative. Images must decode
 as PNG-compatible images, be between 8×8 and 2048×2048 pixels, and be no larger than
 16 MiB. Corrupt, empty, oversized and undersized files are reported individually.
-Optional groups for next-opponent, hero ability, siege machine and spells are also listed.
+Optional groups for battle-ending/return transitions, hero ability, siege machine and spells are also listed. The next-opponent button is required because rejected targets must be safely skipped before the next search. A connection-error template is required so a recognised disconnect pauses the session until explicit user resume.
 
 The validation only checks file integrity and presence. It does not prove that a crop
 matches the current game UI. Calibrate every crop against real screenshots and keep

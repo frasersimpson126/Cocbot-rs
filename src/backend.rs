@@ -3,22 +3,24 @@ use crate::{
     battle::BattleState,
     config::AppConfig,
     deployment::{DeploymentPlanner, Viewport},
+    executor::{DeploymentExecutor, RaidNavigationExecutor, ReturnHomeExecutor},
     loot::{LootTracker, ResourceSnapshot},
     ocr::{OcrEngine, OcrProfile},
-    platform::GameWindow,
+    platform::{create_input, GameWindow},
     pipeline::BattlePipeline,
     raid::{RaidCoordinator, RaidPhase},
     target::{TargetEvaluator, TargetPolicy},
     templates::TemplatePackDiagnostics,
-    vision::SearchRegion,
+    vision::{SearchRegion, TemplateMatcher},
 };
-use anyhow::Result;
+use anyhow::{Context, Result};
 use image::{imageops, DynamicImage};
 use std::{
     path::PathBuf,
-    sync::{atomic::{AtomicBool, Ordering}, mpsc::Sender, Arc},
+    fs,
+    sync::{atomic::{AtomicBool, Ordering}, mpsc::{self, Sender}, Arc},
     thread::{self, JoinHandle},
-    time::Duration,
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 #[derive(Debug, Clone)]
@@ -28,22 +30,33 @@ pub enum BackendEvent {
     BattleUpdated { state: BattleState, confidence: f32 },
     RaidUpdated { phase: RaidPhase, command: String },
     TargetUpdated(String),
+    Ready { can_start: bool, reason: String },
     Status(String),
     Error(String),
     Stopped,
 }
 
-/// Owns the long-running capture and perception worker. Automated input is deliberately
-/// not invoked here: screen templates and loot coordinates must be calibrated first.
+#[derive(Debug, Clone, Copy)]
+pub enum BackendCommand {
+    StartFarming,
+    PauseFarming,
+    ResumeFarming,
+    StopFarming,
+    SaveCalibrationScreenshot,
+}
+
+/// Owns capture, perception, user controls and guarded farming input execution.
 pub struct FarmingBackend {
     stop: Arc<AtomicBool>,
     worker: Option<JoinHandle<()>>,
+    commands: Sender<BackendCommand>,
 }
 
 impl FarmingBackend {
     pub fn start(ocr: OcrEngine, config: AppConfig, events: Sender<BackendEvent>) -> Result<Self> {
         let stop = Arc::new(AtomicBool::new(false));
         let worker_stop = Arc::clone(&stop);
+        let (commands, command_rx) = mpsc::channel();
         let worker = thread::Builder::new()
             .name("cocbot-backend".into())
             .spawn(move || {
@@ -83,11 +96,40 @@ impl FarmingBackend {
                 for message in diagnostics.messages() {
                     let _ = events.send(BackendEvent::Status(message));
                 }
+                let ocr_available = ocr.is_available();
+                if !ocr_available {
+                    let _ = events.send(BackendEvent::Status(format!("Tesseract OCR is unavailable at '{}'; configure its executable path before farming.", ocr.executable())));
+                }
+                let can_start = diagnostics.is_ready()
+                    && opponent_roi.is_some()
+                    && ocr_available
+                    && config.template_pack_calibrated
+                    && config.opponent_loot_roi_calibrated;
+                let readiness_reason = if !diagnostics.is_ready() {
+                    "Required screen or selected troop templates are missing/invalid.".to_owned()
+                } else if !ocr_available {
+                    format!("Tesseract OCR is unavailable at '{}'.", ocr.executable())
+                } else if opponent_roi.is_none() {
+                    "Configure a valid opponent-loot OCR crop before starting.".to_owned()
+                } else if !config.template_pack_calibrated {
+                    "Confirm that every required screen/troop template has been checked against live game screens.".to_owned()
+                } else if !config.opponent_loot_roi_calibrated {
+                    "Confirm that opponent-loot OCR matches real values across multiple opponent screens.".to_owned()
+                } else {
+                    "Template pack and opponent-loot OCR calibration have been confirmed.".to_owned()
+                };
+                let _ = events.send(BackendEvent::Ready { can_start, reason: readiness_reason.clone() });
                 if !diagnostics.is_ready() {
                     let _ = events.send(BackendEvent::Status(
-                        "Automation remains unsafe: required screen and troop templates are missing or invalid. Add calibrated assets before enabling input execution.".into()
+                        "Automation remains locked: required screen and troop templates are missing or invalid.".into()
                     ));
                 }
+                let executors = FarmingExecutors {
+                    navigation: RaidNavigationExecutor::new(TemplateMatcher::new(templates.clone())),
+                    return_home: ReturnHomeExecutor::new(TemplateMatcher::new(templates.clone())),
+                    deployment: DeploymentExecutor::default(),
+                };
+                let mut input = None;
                 let pipeline = BattlePipeline::new(
                     templates,
                     ocr.clone(),
@@ -129,30 +171,88 @@ impl FarmingBackend {
                 let mut stable_count = 0_u8;
                 let mut last_ocr_error: Option<String> = None;
                 let mut last_capture_error: Option<String> = None;
+                let mut capture_error_frames = 0_u8;
+                let mut resize_warning_active = false;
                 let mut last_battle_state: Option<BattleState> = None;
+                let mut unknown_state_frames = 0_u8;
                 let mut last_raid_status: Option<(RaidPhase, String)> = None;
                 let mut last_target_status: Option<String> = None;
+                let mut pending_control: Option<BackendCommand> = None;
+                let mut pending_screenshot = false;
 
                 while !worker_stop.load(Ordering::Relaxed) {
+                    // Pause/stop must still be honoured if capture temporarily fails.
+                    while let Ok(control) = command_rx.try_recv() {
+                        match control {
+                            BackendCommand::PauseFarming => {
+                                automation.pause();
+                                pending_control = None;
+                                let _ = events.send(BackendEvent::Status("Farming paused.".into()));
+                            }
+                            BackendCommand::StopFarming => {
+                                automation.stop();
+                                pending_control = None;
+                                let _ = events.send(BackendEvent::Status("Farming session stopped.".into()));
+                            }
+                            BackendCommand::SaveCalibrationScreenshot => pending_screenshot = true,
+                            start_or_resume @ (BackendCommand::StartFarming | BackendCommand::ResumeFarming) => {
+                                pending_control = Some(start_or_resume);
+                            }
+                        }
+                    }
                     let frame = match window.capture() {
                         Ok(frame) => {
                             last_capture_error = None;
+                            capture_error_frames = 0;
                             frame
                         }
                         Err(error) => {
                             let message = error.to_string();
+                            capture_error_frames = capture_error_frames.saturating_add(1);
                             if last_capture_error.as_deref() != Some(message.as_str()) {
                                 let _ = events.send(BackendEvent::Status(format!("Screen capture failed: {message}")));
                                 last_capture_error = Some(message);
+                            }
+                            if capture_error_frames >= 3
+                                && !matches!(automation.phase(), RaidPhase::Idle | RaidPhase::Paused)
+                            {
+                                automation.pause();
+                                let _ = events.send(BackendEvent::Status("Farming paused after repeated capture failures; restore the game window and explicitly resume.".into()));
                             }
                             sleep_interruptibly(&worker_stop, Duration::from_millis(250));
                             continue;
                         }
                     };
 
+                    if frame.width() != width || frame.height() != height {
+                        let message = format!(
+                            "Game window resized from {width}x{height} to {}x{}; farming paused until monitoring is restarted and the ROI is recalibrated.",
+                            frame.width(), frame.height()
+                        );
+                        if !resize_warning_active {
+                            let _ = events.send(BackendEvent::Status(message));
+                            resize_warning_active = true;
+                        }
+                        automation.pause();
+                        sleep_interruptibly(&worker_stop, Duration::from_millis(250));
+                        continue;
+                    }
+                    resize_warning_active = false;
+
                     match automation.process_frame(&frame, Viewport { width, height }) {
                         Ok(analysis) => {
                             let state = analysis.perception.stable_state;
+                            if state == BattleState::Unknown {
+                                unknown_state_frames = unknown_state_frames.saturating_add(1);
+                                if unknown_state_frames >= 3
+                                    && !matches!(automation.phase(), RaidPhase::Idle | RaidPhase::Paused)
+                                {
+                                    automation.pause();
+                                    let _ = events.send(BackendEvent::Status("Farming paused: three consecutive frames were not recognised. Resolve the screen and explicitly resume.".into()));
+                                }
+                            } else {
+                                unknown_state_frames = 0;
+                            }
                             if last_battle_state != Some(state) {
                                 let _ = events.send(BackendEvent::BattleUpdated {
                                     state,
@@ -165,9 +265,8 @@ impl FarmingBackend {
                                 last_battle_state = Some(state);
                             }
 
-                            // The coordinator is live, but commands are only surfaced to
-                            // the UI. No mouse input is sent until templates and coordinates
-                            // have been validated against real game screenshots.
+                            // Commands are executed below only after explicit Start and only
+                            // while startup asset checks permit farming input.
                             let command = format!("{:?}", analysis.command);
                             let status = (automation.phase(), command);
                             if last_raid_status.as_ref() != Some(&status) {
@@ -203,6 +302,135 @@ impl FarmingBackend {
                                     .unwrap_or_else(|| "No opponent target evaluated".to_owned());
                                 let _ = events.send(BackendEvent::TargetUpdated(status));
                                 last_target_status = target_status;
+                            }
+
+                            let mut command = analysis.command.clone();
+                            if let Some(control) = pending_control.take() {
+                                match control {
+                                    BackendCommand::StartFarming => {
+                                        if !can_start {
+                                            let _ = events.send(BackendEvent::Status(format!("Start refused: {readiness_reason}")));
+                                        } else if !matches!(state, BattleState::HomeVillage | BattleState::BuilderBase) {
+                                            let _ = events.send(BackendEvent::Status("Start refused: wait until the selected village home screen is stably recognised.".into()));
+                                        } else {
+                                            if input.is_none() {
+                                                match create_input() {
+                                                    Ok(created) => input = Some(created),
+                                                    Err(error) => { let _ = events.send(BackendEvent::Error(format!("Desktop input unavailable: {error}"))); }
+                                                }
+                                            }
+                                            if input.is_some() {
+                                                match automation.start(state) {
+                                                    Ok(start_command) => {
+                                                        command = start_command;
+                                                        let _ = events.send(BackendEvent::Status("Farming session started.".into()));
+                                                    }
+                                                    Err(error) => { let _ = events.send(BackendEvent::Status(format!("Could not start farming: {error:?}"))); }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    BackendCommand::ResumeFarming => {
+                                        if matches!(state, BattleState::Unknown | BattleState::ConnectionError) {
+                                            let _ = events.send(BackendEvent::Status("Resume refused: wait for a stable, recognised screen and resolve any connection error.".into()));
+                                        } else {
+                                            if input.is_none() {
+                                                match create_input() {
+                                                    Ok(created) => input = Some(created),
+                                                    Err(error) => { let _ = events.send(BackendEvent::Error(format!("Desktop input unavailable: {error}"))); }
+                                                }
+                                            }
+                                            if input.is_some() {
+                                                command = automation.resume(state);
+                                                let _ = events.send(BackendEvent::Status("Farming resume requested.".into()));
+                                            }
+                                        }
+                                    }
+                                    BackendCommand::PauseFarming | BackendCommand::StopFarming => {}
+                                    BackendCommand::SaveCalibrationScreenshot => pending_screenshot = true,
+                                }
+                            }
+                            while let Ok(control) = command_rx.try_recv() {
+                                match control {
+                                    BackendCommand::StartFarming => {
+                                        if !can_start {
+                                            let _ = events.send(BackendEvent::Status(format!("Start refused: {readiness_reason}")));
+                                        } else if !matches!(state, BattleState::HomeVillage | BattleState::BuilderBase) {
+                                            let _ = events.send(BackendEvent::Status("Start refused: wait until the selected village home screen is stably recognised.".into()));
+                                        } else {
+                                            if input.is_none() {
+                                                match create_input() {
+                                                    Ok(created) => input = Some(created),
+                                                    Err(error) => { let _ = events.send(BackendEvent::Error(format!("Desktop input unavailable: {error}"))); }
+                                                }
+                                            }
+                                            if input.is_some() {
+                                                match automation.start(state) {
+                                                    Ok(start_command) => {
+                                                        command = start_command;
+                                                        let _ = events.send(BackendEvent::Status("Farming session started.".into()));
+                                                    }
+                                                    Err(error) => { let _ = events.send(BackendEvent::Status(format!("Could not start farming: {error:?}"))); }
+                                                }
+                                            }
+                                        }
+                                    }
+                                    BackendCommand::PauseFarming => {
+                                        automation.pause();
+                                        command = crate::raid::RaidCommand::WaitForStableFrame;
+                                        let _ = events.send(BackendEvent::Status("Farming paused.".into()));
+                                    }
+                                    BackendCommand::ResumeFarming => {
+                                        if matches!(state, BattleState::Unknown | BattleState::ConnectionError) {
+                                            let _ = events.send(BackendEvent::Status("Resume refused: wait for a stable, recognised screen and resolve any connection error.".into()));
+                                        } else {
+                                            if input.is_none() {
+                                                match create_input() {
+                                                    Ok(created) => input = Some(created),
+                                                    Err(error) => { let _ = events.send(BackendEvent::Error(format!("Desktop input unavailable: {error}"))); }
+                                                }
+                                            }
+                                            if input.is_some() {
+                                                command = automation.resume(state);
+                                                let _ = events.send(BackendEvent::Status("Farming resume requested.".into()));
+                                            }
+                                        }
+                                    }
+                                    BackendCommand::StopFarming => {
+                                        command = automation.stop();
+                                        let _ = events.send(BackendEvent::Status("Farming session stopped.".into()));
+                                    }
+                                    BackendCommand::SaveCalibrationScreenshot => pending_screenshot = true,
+                                }
+                            }
+
+                            if pending_screenshot {
+                                pending_screenshot = false;
+                                match save_calibration_screenshot(&frame) {
+                                    Ok(path) => { let _ = events.send(BackendEvent::Status(format!("Calibration screenshot saved: {}", path.display()))); }
+                                    Err(error) => { let _ = events.send(BackendEvent::Error(format!("Could not save calibration screenshot: {error}"))); }
+                                }
+                            }
+
+                            if let Some(input_device) = input.as_mut()
+                                && automation.phase() != RaidPhase::Idle
+                                && !matches!(&command,
+                                    &crate::raid::RaidCommand::None
+                                    | &crate::raid::RaidCommand::WaitForStableFrame
+                                    | &crate::raid::RaidCommand::RaidFinished)
+                                && let Err(error) = execute_raid_command(
+                                    input_device, &frame, config.village, state, &command,
+                                    &executors, &mut automation,
+                                )
+                            {
+                                let _ = events.send(BackendEvent::Error(format!("Action refused or failed: {error}")));
+                                if matches!(&command, crate::raid::RaidCommand::Deploy(_)) {
+                                    automation.stop();
+                                    let _ = events.send(BackendEvent::Status("Deployment failed after input may have started; farming stopped to prevent duplicate troop deployment.".into()));
+                                } else {
+                                    automation.pause();
+                                    let _ = events.send(BackendEvent::Status("Farming paused after an input/navigation error. Inspect the game before resuming.".into()));
+                                }
                             }
                         }
                         Err(error) => {
@@ -249,7 +477,27 @@ impl FarmingBackend {
                 let _ = events.send(BackendEvent::Stopped);
             })?;
 
-        Ok(Self { stop, worker: Some(worker) })
+        Ok(Self { stop, worker: Some(worker), commands })
+    }
+
+    pub fn start_farming(&self) -> Result<()> {
+        self.commands.send(BackendCommand::StartFarming).map_err(|_| anyhow::anyhow!("Farming worker is not available"))
+    }
+
+    pub fn pause_farming(&self) -> Result<()> {
+        self.commands.send(BackendCommand::PauseFarming).map_err(|_| anyhow::anyhow!("Farming worker is not available"))
+    }
+
+    pub fn resume_farming(&self) -> Result<()> {
+        self.commands.send(BackendCommand::ResumeFarming).map_err(|_| anyhow::anyhow!("Farming worker is not available"))
+    }
+
+    pub fn stop_farming(&self) -> Result<()> {
+        self.commands.send(BackendCommand::StopFarming).map_err(|_| anyhow::anyhow!("Farming worker is not available"))
+    }
+
+    pub fn save_calibration_screenshot(&self) -> Result<()> {
+        self.commands.send(BackendCommand::SaveCalibrationScreenshot).map_err(|_| anyhow::anyhow!("Farming worker is not available"))
     }
 
     pub fn stop(&mut self) {
@@ -267,19 +515,100 @@ impl Drop for FarmingBackend {
 }
 
 
-/// Resolve the aspect-specific template pack beside the executable first, then from
-/// the current working directory. This keeps packaged builds independent of launch cwd.
+fn save_calibration_screenshot(frame: &DynamicImage) -> Result<PathBuf> {
+    let directory = AppConfig::calibration_dir()?;
+    fs::create_dir_all(&directory)?;
+    let data_directory = directory.parent()
+        .context("Could not resolve local application data directory")?;
+    let aspect_directory = if frame.width() as f32 / frame.height().max(1) as f32 > 1.70 {
+        "16_9"
+    } else {
+        "16_10"
+    };
+    fs::create_dir_all(data_directory.join("assets").join("templates").join(aspect_directory))?;
+    let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_millis();
+    let path = directory.join(format!("game-capture-{timestamp}.png"));
+    frame.save(&path)?;
+    Ok(path)
+}
+
+struct FarmingExecutors {
+    navigation: RaidNavigationExecutor,
+    return_home: ReturnHomeExecutor,
+    deployment: DeploymentExecutor,
+}
+
+fn execute_raid_command(
+    input: &mut enigo::Enigo,
+    frame: &DynamicImage,
+    village: crate::config::Village,
+    state: BattleState,
+    command: &crate::raid::RaidCommand,
+    executors: &FarmingExecutors,
+    automation: &mut AutomationEngine,
+) -> Result<()> {
+    // Re-resolve the window immediately before sending input so a moved or
+    // minimised game window cannot leave stale desktop coordinates in use.
+    let action_window = GameWindow::find()?;
+    if action_window.dimensions() != (frame.width(), frame.height()) {
+        anyhow::bail!("Game window dimensions changed during farming; reconnect and recalibrate before continuing");
+    }
+    match command {
+        crate::raid::RaidCommand::OpenAttackMenu
+        | crate::raid::RaidCommand::FindOpponent
+        | crate::raid::RaidCommand::SkipOpponent
+        | crate::raid::RaidCommand::AttackOpponent => {
+            executors.navigation.execute(&action_window, input, frame, village, state, command)?;
+            if matches!(command, crate::raid::RaidCommand::SkipOpponent) {
+                automation.confirm_opponent_skipped()
+                    .map_err(|error| anyhow::anyhow!("Could not confirm skipped opponent: {error:?}"))?;
+            }
+        }
+        crate::raid::RaidCommand::Deploy(plan) => {
+            let receipt = executors.deployment.execute(&action_window, input, state, plan)?;
+            automation.confirm_deployment_started(state)
+                .map_err(|error| anyhow::anyhow!("Could not confirm deployment: {error:?}"))?;
+            tracing::info!("Deployment sent for {} ({} actions)", receipt.troop_name, receipt.actions_sent);
+        }
+        crate::raid::RaidCommand::ReturnToVillage => {
+            executors.return_home.execute(&action_window, input, frame, village, state)?;
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+/// Resolve the user-writable app-data template pack first, then beside the executable,
+/// and finally from the current working directory.
+fn contains_template_images(directory: &std::path::Path) -> bool {
+    fs::read_dir(directory).is_ok_and(|entries| {
+        entries.flatten().any(|entry| {
+            entry.path().extension()
+                .and_then(|extension| extension.to_str())
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("png"))
+        })
+    })
+}
+
 fn template_directory(width: u32, height: u32) -> PathBuf {
     let aspect_directory = if width as f32 / height.max(1) as f32 > 1.70 {
         "16_9"
     } else {
         "16_10"
     };
+    if let Ok(calibration_directory) = AppConfig::calibration_dir()
+        && let Some(data_directory) = calibration_directory.parent()
+    {
+        let candidate = data_directory.join("assets").join("templates").join(aspect_directory);
+        if contains_template_images(&candidate) {
+            return candidate;
+        }
+    }
     if let Ok(executable) = std::env::current_exe()
         && let Some(directory) = executable.parent()
     {
         let candidate = directory.join("assets").join("templates").join(aspect_directory);
-        if candidate.is_dir() {
+        if contains_template_images(&candidate) {
             return candidate;
         }
     }

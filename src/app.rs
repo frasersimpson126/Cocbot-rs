@@ -27,6 +27,8 @@ pub struct CocbotApp {
     battle_status: String,
     raid_status: String,
     target_status: String,
+    automation_ready: bool,
+    readiness_status: String,
     backend_loot: Option<(LootDelta, LootDelta)>,
     backend_elapsed: Option<std::time::Duration>,
     event_tx: Sender<BackendEvent>,
@@ -49,6 +51,8 @@ impl CocbotApp {
             battle_status: "Not available".into(),
             raid_status: "Idle".into(),
             target_status: "No opponent target evaluated".into(),
+            automation_ready: false,
+            readiness_status: "Connect the game to inspect required templates and OCR calibration.".into(),
             backend_loot: None,
             backend_elapsed: None,
             event_tx,
@@ -91,6 +95,10 @@ impl eframe::App for CocbotApp {
                         self.logs.push(format!("Raid coordinator: {}", self.raid_status));
                     }
                     BackendEvent::TargetUpdated(status) => self.target_status = status,
+                    BackendEvent::Ready { can_start, reason } => {
+                        self.automation_ready = can_start;
+                        self.readiness_status = reason;
+                    }
                     BackendEvent::BattleUpdated { state, confidence } => {
                         self.battle_status = format!("{} ({:.0}% confidence)", battle_state_label(state), confidence * 100.0);
                         self.logs.push(format!("Battle screen: {}", battle_state_label(state)));
@@ -106,6 +114,7 @@ impl eframe::App for CocbotApp {
                     }
                     BackendEvent::Stopped => {
                         self.backend_status = "Monitoring stopped".into();
+                        self.automation_ready = false;
                         self.logs.push("Game monitoring stopped.".into());
                         let _ = self.backend.take();
                     }
@@ -210,7 +219,10 @@ impl eframe::App for CocbotApp {
                         && self.config.opponent_loot_x_percent as u16 + self.config.opponent_loot_width_percent as u16 <= 100
                         && self.config.opponent_loot_y_percent as u16 + self.config.opponent_loot_height_percent as u16 <= 100;
                     ui.label(if valid { "Crop configured; compare OCR output with real opponent loot before trusting it." } else { "Crop disabled or outside the frame." });
+                    ui.checkbox(&mut self.config.opponent_loot_roi_calibrated, "I verified this crop against several real opponent screens");
                 });
+                ui.checkbox(&mut self.config.template_pack_calibrated, "I verified all required templates against live game screens");
+                ui.label("Save settings and reconnect after changing the crop or calibration confirmations.");
                 ui.collapsing("Target requirements", |ui| {
                     ui.label("A target must meet all three resource minimums and the weighted score/confidence thresholds.");
                     ui.add(egui::Slider::new(&mut self.config.minimum_gold, 100_000..=2_000_000)
@@ -257,8 +269,44 @@ impl eframe::App for CocbotApp {
                         backend.stop();
                     }
                 });
-                ui.label("Live capture feeds HUD OCR, battle-state recognition and the raid coordinator. Planned actions are displayed but not sent. Screen templates, opponent loot crops and troop icons still require calibration; automated input remains disabled.");
-                ui.add_enabled(false, egui::Button::new("Start farming — attack engine pending"));
+                ui.label("Start farming is enabled only when required screen/troop templates and the opponent-loot crop pass startup checks. Actions are checked against the current stable screen before input.");
+                if self.backend.is_some() {
+                    ui.horizontal(|ui| {
+                        if ui.add_enabled(self.automation_ready, egui::Button::new("Start farming")).clicked()
+                            && let Some(backend) = self.backend.as_ref()
+                            && let Err(error) = backend.start_farming()
+                        {
+                            self.logs.push(format!("Start command failed: {error}"));
+                        }
+                        if ui.button("Pause").clicked()
+                            && let Some(backend) = self.backend.as_ref()
+                            && let Err(error) = backend.pause_farming()
+                        {
+                            self.logs.push(format!("Pause command failed: {error}"));
+                        }
+                        if ui.button("Resume").clicked()
+                            && let Some(backend) = self.backend.as_ref()
+                            && let Err(error) = backend.resume_farming()
+                        {
+                            self.logs.push(format!("Resume command failed: {error}"));
+                        }
+                        if ui.button("Stop farming").clicked()
+                            && let Some(backend) = self.backend.as_ref()
+                            && let Err(error) = backend.stop_farming()
+                        {
+                            self.logs.push(format!("Stop command failed: {error}"));
+                        }
+                        if ui.button("Save calibration screenshot").clicked()
+                            && let Some(backend) = self.backend.as_ref()
+                            && let Err(error) = backend.save_calibration_screenshot()
+                        {
+                            self.logs.push(format!("Screenshot command failed: {error}"));
+                        }
+                    });
+                    if !self.automation_ready {
+                        ui.label(format!("Farming locked: {}", self.readiness_status));
+                    }
+                }
                 if ui.button("Save farming settings").clicked() {
                     match self.config.save() {
                         Ok(()) => self.logs.push("Farming settings saved.".into()),

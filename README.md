@@ -2,7 +2,7 @@
 
 A Rust desktop rewrite of [BasePilot](https://github.com/efebolukbasi/BasePilot), scoped to Clash of Clans farming and attack automation on Windows 10/11 with Google Play Games for PC.
 
-> **Status: backend in progress.** The project now includes window capture, mouse-input primitives, Tesseract HUD OCR, resource tracking, template matching, battle-state recognition (including battle ending, return transitions and connection errors), loot target scoring, a raid workflow coordinator, a guarded mouse deployment executor, an integrated perception pipeline, and a per-frame automation coordinator. Template assets are not yet bundled and the live capture worker now feeds battle-state recognition and the raid coordinator, with stabilised state and pending commands displayed in the Farming UI. Commands are not sent to the mouse executor. Opponent-loot OCR and troop recognition remain unconfigured; live automation remains disabled until templates and screen coordinates are validated.
+> **Status: backend in progress.** The project now includes window capture, mouse-input primitives, Tesseract HUD OCR, resource tracking, template matching, battle-state recognition (including battle ending, return transitions and connection errors), loot target scoring, a raid workflow coordinator, guarded navigation/deployment/return executors, an integrated perception pipeline, and per-frame automation. Template assets are not bundled. The live worker exposes start/pause/resume/stop controls and can execute the raid workflow, but Start remains locked until required templates and the opponent-loot crop are present and the user confirms both have been calibrated against live game screens. Each action is revalidated against the current screen; a deployment error stops the session to avoid duplicate troop drops.
 
 ## Included scope
 
@@ -21,7 +21,7 @@ There will be no dry-run/simulation mode, clan-related features, ranked attacks,
 ```text
 src/
 ├── app.rs         egui desktop interface and backend status
-├── backend.rs     shared-frame capture, resource OCR and battle perception worker
+├── backend.rs     shared-frame capture, OCR, raid controls and guarded input dispatch
 ├── config.rs      typed TOML farming preferences
 ├── loot.rs        loot deltas, plausibility checks, and hourly rates
 ├── ocr.rs         Tesseract 5 profiles and HUD text parsing
@@ -44,14 +44,13 @@ src/
 At startup the backend inspects the selected strategy's aspect-ratio template directory
 and reports every required and optional recognition group in the Farming log. Required
 groups include village entry, Find Now, matchmaking, opponent-found, battle HUD,
-separate victory and defeat markers, return-home, and the selected army troop icon.
+separate victory and defeat markers, return-home, next-opponent, opponent attack button, connection-error, and the selected army troop icon.
 A group is considered available only when at least one alternative decodes successfully.
 
 Every supplied image is decoded during validation. Empty files, corrupt images, files
 larger than 16 MiB, and images outside the supported 8×8 to 2048×2048 dimensions are
 reported as invalid. Missing or invalid assets never count as a match and do not silently
-lower recognition thresholds. Optional groups (next-opponent, hero ability, siege
-machine and spell icons) are reported separately.
+lower recognition thresholds. Optional groups (battle-ending/return transitions, hero ability, siege machine and spell icons) are reported separately.
 
 Install the assets in the directory matching the captured window aspect ratio:
 
@@ -72,7 +71,9 @@ The Farming page exposes persisted target requirements: minimum gold, elixir and
 
 ## Opponent loot OCR calibration
 
-Opponent loot OCR is disabled by default. In Farming, expand **Opponent loot OCR region** and set the left, top, width and height of a tight crop around the three resource counters on the opponent-search screen. Values are percentages of the full captured game frame, so the crop scales with window resolution. Width and height must be non-zero and the crop must remain inside the frame; otherwise the pipeline keeps opponent OCR disabled. Save settings and reconnect after changing the crop. Compare recognised values against several real opponent screens before relying on target decisions. This crop is independent of the top-right player HUD crop used for session loot tracking.
+Use **Save calibration screenshot** in the connected Farming page to save the current game frame under the application's local data directory (`calibration/`). Crop the required screen-state, button and troop templates from those captures using an image editor, then place the PNGs in the matching aspect-ratio folder under the same local data directory (`assets/templates/16_9/` or `assets/templates/16_10/`). The backend checks this user-writable location before looking beside the executable. The screenshot stays on the local machine.
+
+Opponent loot OCR is disabled by default. The Start control also requires explicit confirmation that the crop has been compared against multiple real opponent screens, and that all required screen/troop templates have been checked against live game screens. In Farming, expand **Opponent loot OCR region** and set the left, top, width and height of a tight crop around the three resource counters on the opponent-search screen. Values are percentages of the full captured game frame, so the crop scales with window resolution. Width and height must be non-zero and the crop must remain inside the frame; otherwise the pipeline keeps opponent OCR disabled. Save settings and reconnect after changing the crop. Compare recognised values against several real opponent screens before relying on target decisions. This crop is independent of the top-right player HUD crop used for session loot tracking.
 
 ## OCR performance
 
@@ -105,7 +106,7 @@ Tesseract 5 must also be installed for live resource OCR. The Windows desktop ca
 1. Add the required upstream screen templates under `assets/templates/` and validate them at 16:9 and 16:10. The current repository contains only the template README.
 2. Add calibrated templates for battle-ending, returning-home and connection-error screens, then calibrate recognition thresholds against real game screenshots; the current matcher is a foundation, not a validated detector.
 3. Add and calibrate the screen and troop templates; current detectors are only as reliable as these assets.
-4. Connect the automation coordinator and executors to the live capture worker with cancellation and fresh-frame checks. The current worker reports live battle state and raid-coordinator decisions but intentionally does not execute commands.
+4. Validate the connected start/pause/resume/stop controls and action executors against real screenshots, including cancellation and recovery paths. The executor integration is guarded by startup asset checks but still requires live-game validation.
 5. Complete hero, siege machine and spell recognition and strategy-specific secondary deployment actions.
 6. Validate every navigation/deployment/return action against real screenshots and recovery paths before enabling Start farming.
 

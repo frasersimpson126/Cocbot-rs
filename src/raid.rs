@@ -13,7 +13,9 @@ pub enum RaidPhase {
     Searching,
     StartingMatchmaking,
     EvaluatingOpponent,
+    StartingBattle,
     SkippingOpponent,
+    AwaitingNextOpponent,
     AwaitingDeployment,
     DeploymentPrepared,
     InBattle,
@@ -28,6 +30,7 @@ pub enum RaidCommand {
     OpenAttackMenu,
     FindOpponent,
     SkipOpponent,
+    AttackOpponent,
     Deploy(DeploymentPlan),
     ReturnToVillage,
     RaidFinished,
@@ -88,9 +91,10 @@ impl RaidCoordinator {
             Village::Home => BattleState::HomeVillage,
             Village::BuilderBase => BattleState::BuilderBase,
         };
-        if state != expected_home {
+        if state != expected_home || self.phase != RaidPhase::Idle {
             return Err(RaidError::UnexpectedState);
         }
+        self.paused_from = None;
         self.phase = RaidPhase::Searching;
         Ok(RaidCommand::OpenAttackMenu)
     }
@@ -114,8 +118,23 @@ impl RaidCoordinator {
                 RaidCommand::WaitForStableFrame
             }
             (RaidPhase::StartingMatchmaking, _) => RaidCommand::WaitForStableFrame,
+            (RaidPhase::StartingBattle, BattleState::HomeBattle) if self.village == Village::Home => {
+                self.phase = RaidPhase::AwaitingDeployment;
+                RaidCommand::WaitForStableFrame
+            }
+            (RaidPhase::StartingBattle, BattleState::BuilderBattle) if self.village == Village::BuilderBase => {
+                self.phase = RaidPhase::AwaitingDeployment;
+                RaidCommand::WaitForStableFrame
+            }
+            (RaidPhase::StartingBattle, _) => RaidCommand::WaitForStableFrame,
             (RaidPhase::Searching, BattleState::Matchmaking) => RaidCommand::WaitForStableFrame,
+            (RaidPhase::SkippingOpponent, BattleState::OpponentFound) => RaidCommand::SkipOpponent,
             (RaidPhase::SkippingOpponent, _) => RaidCommand::WaitForStableFrame,
+            (RaidPhase::AwaitingNextOpponent, BattleState::Matchmaking) => {
+                self.phase = RaidPhase::Searching;
+                RaidCommand::WaitForStableFrame
+            }
+            (RaidPhase::AwaitingNextOpponent, _) => RaidCommand::WaitForStableFrame,
             (RaidPhase::DeploymentPrepared, _) => RaidCommand::WaitForStableFrame,
             (RaidPhase::Searching, BattleState::OpponentFound) => {
                 self.phase = RaidPhase::EvaluatingOpponent;
@@ -154,9 +173,9 @@ impl RaidCoordinator {
         let evaluation = self.evaluator.evaluate(candidate);
         self.last_evaluation = Some(evaluation);
         if evaluation.accepted {
-            self.phase = RaidPhase::AwaitingDeployment;
-            // The backend must call prepare_deployment once troop slots are recognised.
-            RaidCommand::WaitForStableFrame
+            self.phase = RaidPhase::StartingBattle;
+            // An accepted target still requires the opponent-screen Attack button.
+            RaidCommand::AttackOpponent
         } else {
             self.phase = RaidPhase::SkippingOpponent;
             RaidCommand::SkipOpponent
@@ -177,7 +196,7 @@ impl RaidCoordinator {
         if self.phase != RaidPhase::SkippingOpponent {
             return Err(RaidError::UnexpectedState);
         }
-        self.phase = RaidPhase::Searching;
+        self.phase = RaidPhase::AwaitingNextOpponent;
         Ok(())
     }
 
@@ -230,7 +249,7 @@ impl RaidCoordinator {
     }
 
     pub fn pause(&mut self) {
-        if self.phase != RaidPhase::Paused {
+        if !matches!(self.phase, RaidPhase::Idle | RaidPhase::Paused) {
             self.paused_from = Some(self.phase);
             self.phase = RaidPhase::Paused;
         }
@@ -270,9 +289,33 @@ impl RaidCoordinator {
                 self.phase = RaidPhase::SkippingOpponent;
                 RaidCommand::WaitForStableFrame
             }
-            (RaidPhase::StartingMatchmaking, BattleState::AttackMenu | BattleState::Matchmaking) => {
-                self.phase = RaidPhase::StartingMatchmaking;
+            (RaidPhase::AwaitingNextOpponent, BattleState::OpponentFound | BattleState::Matchmaking) => {
+                self.phase = RaidPhase::AwaitingNextOpponent;
                 RaidCommand::WaitForStableFrame
+            }
+            (RaidPhase::StartingMatchmaking, BattleState::AttackMenu) => {
+                self.phase = RaidPhase::StartingMatchmaking;
+                RaidCommand::FindOpponent
+            }
+            (RaidPhase::StartingBattle, BattleState::OpponentFound) => {
+                self.phase = RaidPhase::StartingBattle;
+                RaidCommand::AttackOpponent
+            }
+            (RaidPhase::StartingBattle, BattleState::HomeBattle) if self.village == Village::Home => {
+                self.phase = RaidPhase::AwaitingDeployment;
+                RaidCommand::WaitForStableFrame
+            }
+            (RaidPhase::StartingBattle, BattleState::BuilderBattle) if self.village == Village::BuilderBase => {
+                self.phase = RaidPhase::AwaitingDeployment;
+                RaidCommand::WaitForStableFrame
+            }
+            (RaidPhase::StartingMatchmaking, BattleState::Matchmaking) => {
+                self.phase = RaidPhase::Searching;
+                RaidCommand::WaitForStableFrame
+            }
+            (RaidPhase::InBattle, BattleState::BattleWon | BattleState::BattleLost) => {
+                self.phase = RaidPhase::AwaitingReturn;
+                RaidCommand::ReturnToVillage
             }
             (_, current) if current == home_state => {
                 self.phase = RaidPhase::Searching;
@@ -363,8 +406,11 @@ mod tests {
         };
         assert_eq!(raid.evaluate_opponent(bad), RaidCommand::SkipOpponent);
         assert_eq!(raid.phase(), RaidPhase::SkippingOpponent);
-        assert_eq!(raid.observe_state(BattleState::OpponentFound), RaidCommand::WaitForStableFrame);
+        assert_eq!(raid.observe_state(BattleState::OpponentFound), RaidCommand::SkipOpponent);
         raid.confirm_opponent_skipped().unwrap();
+        assert_eq!(raid.phase(), RaidPhase::AwaitingNextOpponent);
+        assert_eq!(raid.observe_state(BattleState::OpponentFound), RaidCommand::WaitForStableFrame);
+        assert_eq!(raid.observe_state(BattleState::Matchmaking), RaidCommand::WaitForStableFrame);
         assert_eq!(raid.phase(), RaidPhase::Searching);
     }
 
@@ -373,12 +419,25 @@ mod tests {
         let mut raid = coordinator();
         raid.start(BattleState::HomeVillage).unwrap();
         raid.observe_state(BattleState::OpponentFound);
-        assert_eq!(raid.evaluate_opponent(good_target()), RaidCommand::WaitForStableFrame);
+        assert_eq!(raid.evaluate_opponent(good_target()), RaidCommand::AttackOpponent);
+        assert_eq!(raid.phase(), RaidPhase::StartingBattle);
+        assert_eq!(raid.observe_state(BattleState::HomeBattle), RaidCommand::WaitForStableFrame);
         assert_eq!(raid.phase(), RaidPhase::AwaitingDeployment);
         assert_eq!(
             raid.prepare_deployment(BattleState::Matchmaking, Viewport { width: 1280, height: 720 }, &[]),
             Err(RaidError::UnexpectedState),
         );
+    }
+
+    #[test]
+    fn accepted_target_can_be_retried_after_manual_resume() {
+        let mut raid = coordinator();
+        raid.start(BattleState::HomeVillage).unwrap();
+        raid.observe_state(BattleState::OpponentFound);
+        assert_eq!(raid.evaluate_opponent(good_target()), RaidCommand::AttackOpponent);
+        raid.pause();
+        assert_eq!(raid.resume(BattleState::OpponentFound), RaidCommand::AttackOpponent);
+        assert_eq!(raid.phase(), RaidPhase::StartingBattle);
     }
 
     #[test]
@@ -394,7 +453,8 @@ mod tests {
         let mut raid = coordinator();
         raid.start(BattleState::HomeVillage).unwrap();
         raid.observe_state(BattleState::OpponentFound);
-        raid.evaluate_opponent(good_target());
+        assert_eq!(raid.evaluate_opponent(good_target()), RaidCommand::AttackOpponent);
+        raid.observe_state(BattleState::HomeBattle);
         let slot = TroopSlot {
             name: "sneaky_goblin".into(),
             bounds: TemplateMatch { x: 10, y: 10, width: 30, height: 30, confidence: 0.99 },
@@ -419,7 +479,8 @@ mod tests {
         let mut raid = coordinator();
         raid.start(BattleState::HomeVillage).unwrap();
         raid.observe_state(BattleState::OpponentFound);
-        raid.evaluate_opponent(good_target());
+        assert_eq!(raid.evaluate_opponent(good_target()), RaidCommand::AttackOpponent);
+        raid.observe_state(BattleState::HomeBattle);
         let slot = TroopSlot {
             name: "sneaky_goblin".into(),
             bounds: TemplateMatch { x: 10, y: 10, width: 30, height: 30, confidence: 0.99 },
@@ -446,4 +507,43 @@ mod tests {
         );
         assert!(matches!(result, Err(RaidError::WrongVillageStrategy)));
     }
+    #[test]
+    fn pausing_idle_does_not_block_a_later_start() {
+        let mut raid = coordinator();
+        raid.pause();
+        assert_eq!(raid.phase(), RaidPhase::Idle);
+        assert_eq!(raid.start(BattleState::HomeVillage), Ok(RaidCommand::OpenAttackMenu));
+    }
+
+    #[test]
+    fn duplicate_start_is_rejected_until_the_session_is_stopped() {
+        let mut raid = coordinator();
+        raid.start(BattleState::HomeVillage).unwrap();
+        assert_eq!(raid.start(BattleState::HomeVillage), Err(RaidError::UnexpectedState));
+        raid.stop();
+        assert_eq!(raid.start(BattleState::HomeVillage), Ok(RaidCommand::OpenAttackMenu));
+    }
+
+    #[test]
+    fn resuming_after_a_battle_result_returns_to_village() {
+        let mut raid = coordinator();
+        raid.start(BattleState::HomeVillage).unwrap();
+        raid.observe_state(BattleState::OpponentFound);
+        assert_eq!(raid.evaluate_opponent(good_target()), RaidCommand::AttackOpponent);
+        raid.observe_state(BattleState::HomeBattle);
+        let slot = TroopSlot {
+            name: "sneaky_goblin".into(),
+            bounds: TemplateMatch { x: 10, y: 10, width: 30, height: 30, confidence: 0.99 },
+        };
+        raid.prepare_deployment(
+            BattleState::HomeBattle,
+            Viewport { width: 1280, height: 720 },
+            &[slot],
+        ).unwrap();
+        raid.confirm_deployment_started(BattleState::HomeBattle).unwrap();
+        raid.pause();
+        assert_eq!(raid.resume(BattleState::BattleWon), RaidCommand::ReturnToVillage);
+        assert_eq!(raid.phase(), RaidPhase::AwaitingReturn);
+    }
+
 }

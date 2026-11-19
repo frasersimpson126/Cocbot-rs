@@ -38,6 +38,8 @@ pub struct AppConfig {
     pub opponent_loot_y_percent: u8,
     pub opponent_loot_width_percent: u8,
     pub opponent_loot_height_percent: u8,
+    pub template_pack_calibrated: bool,
+    pub opponent_loot_roi_calibrated: bool,
     pub tesseract_path: String,
 }
 
@@ -56,6 +58,8 @@ impl Default for AppConfig {
             opponent_loot_y_percent: 0,
             opponent_loot_width_percent: 0,
             opponent_loot_height_percent: 0,
+            template_pack_calibrated: false,
+            opponent_loot_roi_calibrated: false,
             tesseract_path: String::new(),
         }
     }
@@ -77,6 +81,12 @@ impl AppConfig {
         }
         let raw = fs::read_to_string(path)?;
         toml::from_str(&raw).context("Invalid config.toml")
+    }
+
+    pub fn calibration_dir() -> Result<PathBuf> {
+        let dirs = ProjectDirs::from("uk", "FraserSimpson", "Cocbot-rs")
+            .context("Could not resolve application data directory")?;
+        Ok(dirs.data_local_dir().join("calibration"))
     }
 
     pub fn save(&self) -> Result<()> {
