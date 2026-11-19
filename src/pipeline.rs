@@ -26,7 +26,7 @@ pub struct BattlePipeline {
     deployment_recognizer: DeploymentBarRecognizer,
     stabilizer: StateStabilizer,
     ocr: OcrEngine,
-    opponent_loot_region: SearchRegion,
+    opponent_loot_region: Option<SearchRegion>,
     troop_templates: Vec<String>,
 }
 
@@ -43,9 +43,15 @@ impl BattlePipeline {
             deployment_recognizer: DeploymentBarRecognizer::new(TemplateMatcher::new(directory)),
             stabilizer: StateStabilizer::default(),
             ocr,
-            opponent_loot_region,
+            opponent_loot_region: Some(opponent_loot_region),
             troop_templates,
         }
+    }
+
+    /// Disables opponent-loot OCR until the crop has been calibrated against real screenshots.
+    pub fn without_opponent_loot_ocr(mut self) -> Self {
+        self.opponent_loot_region = None;
+        self
     }
 
     pub fn with_stable_samples(mut self, samples: u8) -> Self {
@@ -58,7 +64,10 @@ impl BattlePipeline {
         let stable_state = self.stabilizer.observe(detection.state);
 
         let opponent_loot = if stable_state == BattleState::OpponentFound {
-            TargetCandidate::from_frame(frame, &self.ocr, self.opponent_loot_region)?
+            match self.opponent_loot_region {
+                Some(region) => TargetCandidate::from_frame(frame, &self.ocr, region)?,
+                None => None,
+            }
         } else {
             None
         };
