@@ -583,7 +583,7 @@ fn execute_raid_command(
 fn contains_template_images(directory: &std::path::Path) -> bool {
     fs::read_dir(directory)
         .map(|entries| {
-            entries.filter_map(|entry| entry.ok()).any(|entry| {
+            entries.flatten().any(|entry| {
                 entry.path().extension()
                     .and_then(|extension| extension.to_str())
                     .is_some_and(|extension| extension.eq_ignore_ascii_case("png"))
