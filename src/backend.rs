@@ -290,7 +290,7 @@ impl FarmingBackend {
                                     | &crate::raid::RaidCommand::RaidFinished)
                             {
                                 if let Err(error) = execute_raid_command(
-                                    &window, input_device, &frame, config.village, state, &command,
+                                    input_device, &frame, config.village, state, &command,
                                     &navigation, &return_home, &deployment, &mut automation,
                                 ) {
                                     let _ = events.send(BackendEvent::Error(format!("Action refused or failed: {error}")));
@@ -383,7 +383,6 @@ impl Drop for FarmingBackend {
 
 
 fn execute_raid_command(
-    window: &GameWindow,
     input: &mut enigo::Enigo,
     frame: &DynamicImage,
     village: crate::config::Village,
