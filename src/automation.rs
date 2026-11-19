@@ -35,6 +35,10 @@ impl AutomationEngine {
         self.raid.phase()
     }
 
+    pub fn last_evaluation(&self) -> Option<crate::target::TargetEvaluation> {
+        self.raid.last_evaluation()
+    }
+
     pub fn process_frame(
         &mut self,
         frame: &DynamicImage,
