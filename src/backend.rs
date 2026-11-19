@@ -162,6 +162,7 @@ impl FarmingBackend {
                 let mut last_capture_error: Option<String> = None;
                 let mut resize_warning_active = false;
                 let mut last_battle_state: Option<BattleState> = None;
+                let mut unknown_state_frames = 0_u8;
                 let mut last_raid_status: Option<(RaidPhase, String)> = None;
                 let mut last_target_status: Option<String> = None;
                 let mut pending_control: Option<BackendCommand> = None;
@@ -219,6 +220,17 @@ impl FarmingBackend {
                     match automation.process_frame(&frame, Viewport { width, height }) {
                         Ok(analysis) => {
                             let state = analysis.perception.stable_state;
+                            if state == BattleState::Unknown {
+                                unknown_state_frames = unknown_state_frames.saturating_add(1);
+                                if unknown_state_frames >= 3
+                                    && !matches!(automation.phase(), RaidPhase::Idle | RaidPhase::Paused)
+                                {
+                                    automation.pause();
+                                    let _ = events.send(BackendEvent::Status("Farming paused: three consecutive frames were not recognised. Resolve the screen and explicitly resume.".into()));
+                                }
+                            } else {
+                                unknown_state_frames = 0;
+                            }
                             if last_battle_state != Some(state) {
                                 let _ = events.send(BackendEvent::BattleUpdated {
                                     state,
