@@ -578,6 +578,14 @@ fn template_directory(width: u32, height: u32) -> PathBuf {
     } else {
         "16_10"
     };
+    if let Ok(calibration_directory) = AppConfig::calibration_dir()
+        && let Some(data_directory) = calibration_directory.parent()
+    {
+        let candidate = data_directory.join("assets").join("templates").join(aspect_directory);
+        if candidate.is_dir() {
+            return candidate;
+        }
+    }
     if let Ok(executable) = std::env::current_exe()
         && let Some(directory) = executable.parent()
     {
