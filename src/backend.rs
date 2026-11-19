@@ -418,19 +418,18 @@ impl FarmingBackend {
                                     &crate::raid::RaidCommand::None
                                     | &crate::raid::RaidCommand::WaitForStableFrame
                                     | &crate::raid::RaidCommand::RaidFinished)
-                            {
-                                if let Err(error) = execute_raid_command(
+                                && let Err(error) = execute_raid_command(
                                     input_device, &frame, config.village, state, &command,
                                     &executors, &mut automation,
-                                ) {
-                                    let _ = events.send(BackendEvent::Error(format!("Action refused or failed: {error}")));
-                                    if matches!(&command, crate::raid::RaidCommand::Deploy(_)) {
-                                        automation.stop();
-                                        let _ = events.send(BackendEvent::Status("Deployment failed after input may have started; farming stopped to prevent duplicate troop deployment.".into()));
-                                    } else {
-                                        automation.pause();
-                                        let _ = events.send(BackendEvent::Status("Farming paused after an input/navigation error. Inspect the game before resuming.".into()));
-                                    }
+                                )
+                            {
+                                let _ = events.send(BackendEvent::Error(format!("Action refused or failed: {error}")));
+                                if matches!(&command, crate::raid::RaidCommand::Deploy(_)) {
+                                    automation.stop();
+                                    let _ = events.send(BackendEvent::Status("Deployment failed after input may have started; farming stopped to prevent duplicate troop deployment.".into()));
+                                } else {
+                                    automation.pause();
+                                    let _ = events.send(BackendEvent::Status("Farming paused after an input/navigation error. Inspect the game before resuming.".into()));
                                 }
                             }
                         }
