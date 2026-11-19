@@ -220,10 +220,18 @@ impl eframe::App for CocbotApp {
                 ui.separator();
                 ui.heading("Current storages");
                 if let Some(storage) = self.current_storage {
-                    ui.horizontal(|ui| {
-                        ui.label(format!("Gold: {:}", storage.gold));
-                        ui.label(format!("Elixir: {:}", storage.elixir));
-                        ui.label(format!("Dark elixir: {:}", storage.dark_elixir));
+                    ui.horizontal_wrapped(|ui| {
+                        for (label, value, accent) in [
+                            ("GOLD", storage.gold, egui::Color32::from_rgb(242, 190, 75)),
+                            ("ELIXIR", storage.elixir, egui::Color32::from_rgb(210, 95, 225)),
+                            ("DARK ELIXIR", storage.dark_elixir, egui::Color32::from_rgb(150, 110, 210)),
+                        ] {
+                            egui::Frame::group(ui.style()).show(ui, |ui| {
+                                ui.set_min_width(175.0);
+                                ui.label(egui::RichText::new(label).small().weak());
+                                ui.heading(egui::RichText::new(format!("{value:,}")).size(25.0).color(accent));
+                            });
+                        }
                     });
                 } else { ui.label("Waiting for OCR readings. Connect to the game to read storage values."); }
                 ui.separator();
