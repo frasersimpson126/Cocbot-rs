@@ -13,7 +13,7 @@ use crate::{
     templates::TemplatePackDiagnostics,
     vision::{SearchRegion, TemplateMatcher},
 };
-use anyhow::Result;
+use anyhow::{Context, Result};
 use image::{imageops, DynamicImage};
 use std::{
     path::PathBuf,
@@ -347,6 +347,7 @@ impl FarmingBackend {
                                         }
                                     }
                                     BackendCommand::PauseFarming | BackendCommand::StopFarming => {}
+                                    BackendCommand::SaveCalibrationScreenshot => pending_screenshot = true,
                                 }
                             }
                             while let Ok(control) = command_rx.try_recv() {
